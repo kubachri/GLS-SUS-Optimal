@@ -317,7 +317,7 @@ def main():
     # 6.d) If infeasible, print all violated constraints
     # log_infeasible_constraints(model)
 
-        # 7) Build the production DataFrame
+    # 9) Build the production DataFrame
     prod_rows = []
     for (g,f) in model.OUT_p:
         for t in model.T:
@@ -329,90 +329,58 @@ def main():
             })
     df_prod = pd.DataFrame(prod_rows)
 
-    # 8) Build the storage DataFrame
+    # 10) Build the storage DataFrame
     store_rows = []
     for g in model.G_s:
         for t in model.T:
             row = {
-                'tech':       g,
-                'time':       t,
+                'tech':         g,
+                'time':         t,
                 'FuelTotalSto': model.FuelTotalSto[g,t].value,
                 'discharge':    model.Discharge[g,t].value,
                 'soc':          model.Volume[g,t].value
             }
             for (gg,f) in model.STO_IN:
-                if gg == g:
+                if gg==g:
                     row[f'in_{f}'] = model.FuelUseSto[g,f,t].value
             for (gg,f) in model.STO_OUT:
-                if gg == g:
+                if gg==g:
                     row[f'out_{f}'] = model.GenerationSto[g,f,t].value
             store_rows.append(row)
     df_store = pd.DataFrame(store_rows)
 
-    # 9) Build the hourly debug table
-    debug_rows = []
-    for t in model.T:
-        prod = sum(
-            model.Generation[g, 'HydrogenCom', t].value
-            for (g,e) in model.OUT_p if e == 'HydrogenCom'
-        ) + sum(
-            model.GenerationSto[g, 'HydrogenCom', t].value
-            for (g,e) in model.STO_OUT if e == 'HydrogenCom'
+    # 11) Build the weekly‐contract debug table
+    weekly_rows = []
+    for w in model.W:
+        t_end = last_hour[w]
+        discharged = sum(
+            model.GenerationSto[g,'HydrogenCom',t_end].value
+            for (g,e) in model.STO_OUT if e=='HydrogenCom'
         )
-        slack = model.h2_short[t].value
-        if slack > 0:
-            debug_rows.append({'time':t, 'production':prod, 'slack':slack})
-    if debug_rows:
-        df_debug = pd.DataFrame(debug_rows).set_index('time')
-        print("Bottleneck hours:")
-        print(df_debug)
-    else:
-        df_debug = pd.DataFrame(columns=['production','slack'])
-        print("✅ All hourly demands met. No bottleneck hours.")
-
-    # 10) Build the per‐hour metrics for only the bottleneck hours
-    metric_rows = []
-    for t in df_debug.index:
-        metric_rows.append({
-            'time':         t,
-            'soc_H2':       model.Volume['HydrogenStorage',t].value,
-            'charge_H2':    model.FuelTotalSto['HydrogenStorage',t].value,
-            'discharge_H2': model.Discharge['HydrogenStorage',t].value,
-            'wind_el':      sum(model.Generation[g,'Electricity',t].value
-                                for (g,e) in model.OUT_p
-                                if e=='Electricity' and 'Wind' in g),
-            'solar_el':     sum(model.Generation[g,'Electricity',t].value
-                                for (g,e) in model.OUT_p
-                                if e=='Electricity' and 'Solar' in g),
-            'elec_H2_prod': sum(model.Generation[g,'HydrogenCom',t].value
-                                for (g,e) in model.OUT_p
-                                if e=='HydrogenCom' and 'Electrolysis' in g),
-            'slack':        model.h2_short[t].value
+        slack = model.weekly_short[w].value
+        weekly_rows.append({
+            'week':        w,
+            'week_end':    t_end,
+            'discharged':  discharged,
+            'contract':    model.weekly_demand[w],
+            'shortfall':   slack
         })
-    if metric_rows:
-        df_metrics = pd.DataFrame(metric_rows).set_index('time')
-        print(df_metrics)
-    else:
-        df_metrics = pd.DataFrame(columns=[
-            'soc_H2','charge_H2','discharge_H2','wind_el',
-            'solar_el','elec_H2_prod','slack'
-        ])
-        print("✅ No metrics to show; all slack zero.")
 
-    # 11) Check terminal SOC
+    df_weekly = pd.DataFrame(weekly_rows).set_index('week')
+    print("\nWeekly delivery summary (per contract):")
+    print(df_weekly)
+
+    # 12) Check terminal SOC
     end_t     = model.T.last()
     start_soc = model.soc_init['HydrogenStorage']
     end_soc   = model.Volume['HydrogenStorage', end_t].value
-    print(f"Start SOC = {start_soc:.3f}, End SOC = {end_soc:.3f}")
+    print(f"\nStart SOC = {start_soc:.3f}, End SOC = {end_soc:.3f}")
 
-    # 12) Write everything to Excel
+    # 13) Write everything to Excel
     with pd.ExcelWriter('storage_with_market.xlsx', engine='xlsxwriter') as w:
         df_prod.to_excel(w, sheet_name='Production', index=False)
         df_store.to_excel(w, sheet_name='Storage',    index=False)
-        if not df_debug.empty:
-            df_debug.to_excel(w, sheet_name='HourlyBottlenecks')
-        if not df_metrics.empty:
-            df_metrics.to_excel(w, sheet_name='BottleneckMetrics')
+        df_weekly.to_excel(w, sheet_name='WeeklyDelivery')
     print("✅ storage_with_market.xlsx written")
 
 

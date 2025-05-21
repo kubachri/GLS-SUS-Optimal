@@ -42,7 +42,7 @@ def export_results_to_excel(model, filename='results.xlsx'):
         df_prod.to_excel(writer, sheet_name='Production', index=False)
         df_stor.to_excel(writer, sheet_name='Storage', index=False)
 
-    return '/mnt/data/results.xlsx'
+    return filename
 
 # Example usage:
 # filepath = export_results_to_excel(model)

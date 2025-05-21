@@ -2,8 +2,8 @@
 import os
 import pandas as pd
 from pyomo.environ import (
-    ConcreteModel, Set, Param, Var, Constraint, Binary,
-    NonNegativeReals, SolverFactory, Objective, maximize
+    ConcreteModel, Set, Param, Var, Constraint, Binary, Reals,
+    NonNegativeReals, SolverFactory, Objective, maximize, value
 )
 import logging
 from pyomo.util.infeasible import log_infeasible_constraints
@@ -119,6 +119,33 @@ def main():
     model.STO_OUT = Set(dimen=2, initialize=[(g,f) for (g,f),v in sigma_out.items()
                                               if v>0 and g in G_s])
 
+    model.A      = Set(initialize=data['A'])
+    area_of_tech = data['area_of']   # tech → area dict
+
+    # 2) Flow‐set (area_in, area_out, energy)
+    model.FlowSet = Set(dimen=3, initialize=data['FlowSet'])
+
+    # 3) Which commodities can be bought/sold?
+    #    (any (area,energy) pair that appears in the price dicts)
+    buy_pairs  = sorted({(a,e) for (a,e,t) in data['price_buy']})
+    sell_pairs = sorted({(a,e) for (a,e,t) in data['price_sell']})
+    model.BuyE  = Set(dimen=2, initialize=buy_pairs)
+    model.SaleE = Set(dimen=2, initialize=sell_pairs)
+
+    # extract numeric hour
+    hour_nums = {t: int(t.split('-',1)[1]) for t in T}
+    week_of    = {t: ((h-1)//168) + 1 for t,h in hour_nums.items()}
+    weeks      = sorted(set(week_of.values()))
+    # for each week, pick the hour with the highest number
+    hours_by_week = {}
+    for t,w in week_of.items():
+        hours_by_week.setdefault(w, []).append(t)
+    last_hour = { w: max(lst, key=lambda t: hour_nums[t])
+                  for w,lst in hours_by_week.items() }
+
+    # ─── add to Pyomo ───
+    model.W = Set(initialize=weeks)
+
     # --- Parameters ---
     model.PMAX     = Param(model.G,          initialize=Pmax,       within=NonNegativeReals)
     model.Profile  = Param(model.G, model.T, initialize=profile,    within=NonNegativeReals)
@@ -142,6 +169,20 @@ def main():
                             initialize=price_H2,
                             within=NonNegativeReals)
 
+    # weekly delivery requirement: 2 tons/week
+    weekly_demand = {w: 2.0 for w in weeks}
+    model.weekly_demand = Param(model.W,
+                                initialize=weekly_demand,
+                                within=NonNegativeReals)
+
+    # commodity prices from data_loader
+    model.price_buy  = Param(model.A, model.E, model.T,
+        initialize=lambda m,a,e,t: data['price_buy'].get((a,e,t), 0.0),
+        within=Reals)
+    model.price_sell = Param(model.A, model.E, model.T,
+        initialize=lambda m,a,e,t: data['price_sell'].get((a,e,t), 0.0),
+        within=Reals)
+
     # --- Variables ---
     model.FuelTotal     = Var(model.G_p,   model.T,      within=NonNegativeReals)
     model.FuelUse       = Var(model.IN_p,  model.T,      within=NonNegativeReals)
@@ -153,10 +194,14 @@ def main():
     model.Discharge     = Var(model.G_s,   model.T,      within=NonNegativeReals)
     model.GenerationSto = Var(model.STO_OUT,model.T,      within=NonNegativeReals)
     model.Volume        = Var(model.G_s,   model.T,      within=NonNegativeReals)
-    model.Sell          = Var(model.G_s,   model.T,      within=NonNegativeReals)
     model.Mode          = Var(model.G_s,   model.T,      domain=Binary)
 
-    model.h2_short = Var(model.T, within=NonNegativeReals)
+    model.weekly_short = Var(model.W, within=NonNegativeReals)
+
+    # decision to buy / sell on the DA market
+    model.BuyCom  = Var(model.BuyE,  model.T, within=NonNegativeReals)
+    model.SellCom = Var(model.SaleE, model.T, within=NonNegativeReals)
+    model.Flow    = Var(model.FlowSet, model.T, within=NonNegativeReals)
 
     # --- Constraints ---
 
@@ -234,50 +279,91 @@ def main():
     model.DischargingMax = Constraint(model.G_s, model.T, rule=discharging_max)
 
     # --- NEW: TerminalSOC: force end‐of‐horizon SOC back to initial SOC ---
-    # def terminal_soc(m, g):
-    #     return m.Volume[g, m.T.last()] == m.soc_init[g]
-    # model.TerminalSOC = Constraint(model.G_s, rule=terminal_soc)
+    def terminal_soc(m, g):
+        return m.Volume[g, m.T.last()] == m.soc_init[g]
+    model.TerminalSOC = Constraint(model.G_s, rule=terminal_soc)
 
-    def h2_demand_soft(m, t):
-        # collect any ‘Generation’ variables (in case you add non‐storage H2 techs later)
-        prod_terms = [
-            m.Generation[g, e, t]
-            for (g, e) in m.OUT_p
+    def weekly_end_discharge_soft(m, w):
+        t_end = last_hour[w]
+        # only storage‐discharge variables at t_end count
+        terms = [
+            m.GenerationSto[g, 'HydrogenCom', t_end]
+            for (g,e) in m.STO_OUT
             if e == 'HydrogenCom'
         ]
-        # add storage discharge into HydrogenCom
-        prod_terms += [
-            m.GenerationSto[g, e, t]
-            for (g, e) in m.STO_OUT
-            if e == 'HydrogenCom'
-        ]
-        if not prod_terms:
+        if not terms:
             return Constraint.Skip
-        # now include the slack
-        return sum(prod_terms) + m.h2_short[t] >= m.h2_demand[t]
+        # allow slack if you can’t meet 2.0 exactly
+        return sum(terms) + m.weekly_short[w] >= m.weekly_demand[w]
 
-    model.H2Demand = Constraint(model.T, rule=h2_demand_soft)
+    model.WeeklyEndDischarge = Constraint(model.W, rule=weekly_end_discharge_soft)
 
+    def hub_balance(m, a, e, t):
+        # 1) do we even need a constraint here?
+        has_market = (a,e) in m.BuyE or (a,e) in m.SaleE
+        has_tech   = any(
+            area_of_tech[g]==a and ((g,e) in m.IN_p or (g,e) in m.OUT_p)
+            for g in m.G
+        )
+        has_flow = any(
+            (aa,a,e) in m.FlowSet or (a,aa,e) in m.FlowSet
+            for aa in m.A
+        )
+        if not (has_market or has_tech or has_flow):
+            return Constraint.Skip
 
+        # 2) collect buys/sells
+        buy  = m.BuyCom[a,e,t] if (a,e) in m.BuyE  else 0
+        sell = m.SellCom[a,e,t] if (a,e) in m.SaleE else 0
+
+        # 3) flows
+        imports = sum(m.Flow[a0,a,e,t]
+                      for (a0,aa,ee) in m.FlowSet
+                      if aa==a and ee==e)
+        exports = sum(m.Flow[a,a1,e,t]
+                      for (aa,a1,ee) in m.FlowSet
+                      if aa==a and ee==e)
+
+        # 4) local prod/use
+        prod_nonsto = sum(m.Generation[g,e,t]
+                          for (g,ee) in m.OUT_p
+                          if ee==e and area_of_tech[g]==a)
+        prod_sto    = sum(m.GenerationSto[g,e,t]
+                          for (g,ee) in m.STO_OUT
+                          if ee==e and area_of_tech[g]==a)
+        use_nonsto  = sum(m.FuelUse[g,e,t]
+                          for (g,ee) in m.IN_p
+                          if ee==e and area_of_tech[g]==a)
+        use_sto     = sum(m.FuelUseSto[g,e,t]
+                          for (g,ee) in m.STO_IN
+                          if ee==e and area_of_tech[g]==a)
+
+        # 5) enforce equality
+        return (buy + imports + prod_nonsto + prod_sto
+               ) == (use_nonsto + use_sto + sell + exports)
+
+    model.HubBalance = Constraint(model.A, model.E, model.T, rule=hub_balance)
 
     # 5) Encourage storage cycling
     penalty = 1e3  # or some suitably large number
 
-    model.Profit = Objective(
-        expr=(
-            sum(
-                model.h2_price[t]
-                * sum(
-                    model.GenerationSto[g, 'HydrogenCom', t]
-                    for (g, e) in model.OUT_p
-                    if e == 'HydrogenCom'
-                )
-                for t in model.T
-            )
-            - penalty * sum(model.h2_short[t] for t in model.T)
-        ),
-        sense=maximize
-    )
+    penalty_weekly = 1e3
+
+    def profit_expr(m):
+        revenue = sum(
+            m.price_sell[a,e,t] * m.SellCom[a,e,t]
+            for (a,e) in m.SaleE for t in m.T
+        )
+        cost = sum(
+            m.price_buy[a,e,t] * m.BuyCom[a,e,t]
+            for (a,e) in m.BuyE for t in m.T
+        )
+        slack_penalty = penalty_weekly * sum(m.weekly_short[w] for w in m.W)
+        return revenue - cost - slack_penalty
+
+    model.Profit = Objective(rule=profit_expr, sense=maximize)
+
+
 
     # 6) Solve and debug infeasibility
     solver = SolverFactory('gurobi')
@@ -294,10 +380,45 @@ def main():
     # 6.c) Solve once
     results = solver.solve(model, tee=True)
 
+    # ─── DEBUG: check the balance for the first 3 hours ────────────────────
+    print("\n--- Hub balances (first 3 hours) ---")
+    for a in model.A:
+        for e in ['Electricity','HydrogenCom']:
+            for t in list(model.T)[:3]:
+                lhs_expr = (
+                    (model.BuyCom[a,e,t].value if (a,e) in model.BuyE else 0)
+                    + sum(value(model.Flow[a0,a,e,t])
+                          for (a0,aa,ee) in model.FlowSet
+                          if aa==a and ee==e)
+                    + sum(value(model.Generation[g,e,t])
+                          for (g,ee) in model.OUT_p
+                          if ee==e and area_of_tech[g]==a)
+                    + sum(value(model.GenerationSto[g,e,t])
+                          for (g,ee) in model.STO_OUT
+                          if ee==e and area_of_tech[g]==a)
+                )
+                rhs_expr = (
+                    sum(value(model.FuelUse[g,e,t])
+                        for (g,ee) in model.IN_p
+                        if ee==e and area_of_tech[g]==a)
+                    + sum(value(model.FuelUseSto[g,e,t])
+                          for (g,ee) in model.STO_IN
+                          if ee==e and area_of_tech[g]==a)
+                    + (model.SellCom[a,e,t].value if (a,e) in model.SaleE else 0)
+                    + sum(value(model.Flow[a,a1,e,t])
+                          for (aa,a1,ee) in model.FlowSet
+                          if aa==a and ee==e)
+                )
+                print(f"{a:5s} | {e:12s} | {t:8s} | "
+                      f"LHS={lhs_expr:.6f} | RHS={rhs_expr:.6f}")
+    print("--- end debug ---\n")
+
+
+
     # 6.d) If infeasible, print all violated constraints
     # log_infeasible_constraints(model)
 
-    # 7) Export
+    # 7) Build the production DataFrame
     prod_rows = []
     for (g,f) in model.OUT_p:
         for t in model.T:
@@ -309,6 +430,39 @@ def main():
             })
     df_prod = pd.DataFrame(prod_rows)
 
+    # 8) Build the storage DataFrame
+    store_rows = []
+    for g in model.G_s:
+        for t in model.T:
+            row = {
+                'tech':       g,
+                'time':       t,
+                'FuelTotalSto': model.FuelTotalSto[g,t].value,
+                'discharge':    model.Discharge[g,t].value,
+                'soc':          model.Volume[g,t].value
+            }
+            for (gg,f) in model.STO_IN:
+                if gg == g:
+                    row[f'in_{f}'] = model.FuelUseSto[g,f,t].value
+            for (gg,f) in model.STO_OUT:
+                if gg == g:
+                    row[f'out_{f}'] = model.GenerationSto[g,f,t].value
+            store_rows.append(row)
+    df_store = pd.DataFrame(store_rows)
+
+    # 9) Build the production DataFrame
+    prod_rows = []
+    for (g,f) in model.OUT_p:
+        for t in model.T:
+            prod_rows.append({
+                'tech':    g,
+                'carrier': f,
+                'time':    t,
+                'output':  model.Generation[g,f,t].value
+            })
+    df_prod = pd.DataFrame(prod_rows)
+
+    # 10) Build the storage DataFrame
     store_rows = []
     for g in model.G_s:
         for t in model.T:
@@ -328,84 +482,38 @@ def main():
             store_rows.append(row)
     df_store = pd.DataFrame(store_rows)
 
-    rows = []
-    for t in model.T:
-        # total H2 production this hour
-        prod = sum(
-            model.Generation[g, 'HydrogenCom', t].value
-            for (g, e) in model.OUT_p
-            if e == 'HydrogenCom'
-        ) + sum(
-            model.GenerationSto[g, 'HydrogenCom', t].value
-            for (g, e) in model.STO_OUT
-            if e == 'HydrogenCom'
+    # 11) Build the weekly‐contract debug table
+    weekly_rows = []
+    for w in model.W:
+        t_end = last_hour[w]
+        discharged = sum(
+            model.GenerationSto[g,'HydrogenCom',t_end].value
+            for (g,e) in model.STO_OUT if e=='HydrogenCom'
         )
-        slack = model.h2_short[t].value
-        rows.append({'time': t, 'production': prod, 'slack': slack})
-
-    df_debug = pd.DataFrame(rows).set_index('time')
-    if df_debug.empty:
-        print("All demands met.  No problem hours.")
-    else:
-        print(df_debug[df_debug['slack'] > 0])
-
-
-    # get the hours where demand isn’t met
-    hours = list(df_debug[df_debug['slack'] > 0].index)
-
-    rows = []
-    for t in hours:
-        # 1) HydrogenStorage state‐of‐charge, charge and discharge
-        soc       = model.Volume['HydrogenStorage',    t].value
-        charge    = model.FuelTotalSto['HydrogenStorage', t].value
-        discharge = model.Discharge['HydrogenStorage',   t].value
-
-        # 2) Solar & Wind electricity production
-        wind_prod  = sum(
-            model.Generation[g, 'Electricity', t].value
-            for (g,e) in model.OUT_p
-            if e=='Electricity' and 'Wind'  in g
-        )
-        solar_prod = sum(
-            model.Generation[g, 'Electricity', t].value
-            for (g,e) in model.OUT_p
-            if e=='Electricity' and 'Solar' in g
-        )
-
-        # 3) Electrolysis hydrogen production (before storage)
-        elec_prod = sum(
-            model.Generation[g, 'HydrogenCom', t].value
-            for (g,e) in model.OUT_p
-            if e=='HydrogenCom' and 'Electrolysis' in g
-        )
-
-        rows.append({
-            'time':        t,
-            'soc_H2':      soc,
-            'charge_H2':   charge,
-            'discharge_H2':discharge,
-            'wind_el':     wind_prod,
-            'solar_el':    solar_prod,
-            'elec_H2_prod':elec_prod,
-            'slack':       model.h2_short[t].value
+        slack = model.weekly_short[w].value
+        weekly_rows.append({
+            'week':        w,
+            'week_end':    t_end,
+            'discharged':  discharged,
+            'contract':    model.weekly_demand[w],
+            'shortfall':   slack
         })
 
-    if rows:
-        df_metrics = pd.DataFrame(rows).set_index('time')
-        print(df_metrics)
-    else:
-        print("✅ All H₂ demands met. No bottleneck hours.")
+    df_weekly = pd.DataFrame(weekly_rows).set_index('week')
+    print("\nWeekly delivery summary (per contract):")
+    print(df_weekly)
 
-    # Check end‐of‐horizon SOC vs initial
-    end_t = model.T.last()
+    # 12) Check terminal SOC
+    end_t     = model.T.last()
     start_soc = model.soc_init['HydrogenStorage']
     end_soc   = model.Volume['HydrogenStorage', end_t].value
-    print(f"Start SOC = {start_soc:.3f}, End SOC = {end_soc:.3f}")
+    print(f"\nStart SOC = {start_soc:.3f}, End SOC = {end_soc:.3f}")
 
+    # 13) Write everything to Excel
     with pd.ExcelWriter('storage_with_market.xlsx', engine='xlsxwriter') as w:
-        df_prod .to_excel(w, sheet_name='Production', index=False)
+        df_prod.to_excel(w, sheet_name='Production', index=False)
         df_store.to_excel(w, sheet_name='Storage',    index=False)
-
+        df_weekly.to_excel(w, sheet_name='WeeklyDelivery')
     print("✅ storage_with_market.xlsx written")
 
 if __name__ == "__main__":

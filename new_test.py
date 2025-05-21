@@ -11,14 +11,15 @@ def main():
     tech_df = load_techdata()
 
     # 2) Extract sets & raw parameters
-    G         = data['G']
-    T         = data['T']
-    sigma_in  = data['sigma_in'].copy()
-    sigma_out = data['sigma_out'].copy()
-    Pmax      = data.get('pmax', data['Pmax']).copy()
-    profile   = data['Profile']
+    G           = data['G']
+    T           = data['T']
+    sigma_in    = data['sigma_in'].copy()
+    sigma_out   = data['sigma_out'].copy()
+    Pmax        = data.get('pmax', data['Pmax']).copy()
+    profile     = data['Profile']
     # 2.a) All energy carriers, sorted
-    carriers = sorted({f for (g, f) in sigma_in} | {f for (g, f) in sigma_out})
+    carriers    = sorted({f for (g, f) in sigma_in} | {f for (g, f) in sigma_out})
+    G_s         = data['G_s']
 
     # ─── 2.1) UC / RR / scale capacity ─────────────────────────────────
     orig_cap = tech_df['Capacity'].copy()
@@ -67,10 +68,6 @@ def main():
         tot_out = sum(v for (gg, e), v in sigma_out.items() if gg == g)
         Fe[g] = (tot_out / tot_in)
 
-    print("Fe")
-    print(Fe)
-    print('---------')
-
     # 2.c) normalize raw mixes → fractions
     in_frac, out_frac = {}, {}
 
@@ -89,19 +86,9 @@ def main():
             for (_, e), v in out_items:
                 out_frac[(g, e)] = v / total_out
 
-    print("IN_FRAC")
-    print("----------")
-    print(in_frac)
-    print("----------")
-    print("")
-    print("OUT_FRAC")
-    print("----------")
-    print(out_frac)
-    print("----------")
-
     # 2.e) SOC init & max
-    soc_init = {g: tech_df.at[g, 'InitialVolume'] for g in G if 'Storage' in g }
-    soc_max = {g: tech_df.at[g, 'StorageCap'] for g in G if 'Storage' in g}
+    soc_init = {g: tech_df.at[g, 'InitialVolume'] for g in G_s}
+    soc_max = {g: tech_df.at[g, 'StorageCap'] for g in G_s}
 
 
     # 3) Build model
@@ -111,13 +98,14 @@ def main():
     model.G = Set(initialize=G)
     model.F = Set(initialize=carriers)
     model.T = Set(initialize=T)
+    model.G_s = Set(initialize=G_s, within=model.G)
 
     # --- Parameters ---
     model.PMAX = Param(model.G, initialize=Pmax, within=NonNegativeReals)
     model.Profile = Param(model.G, model.T, initialize=profile, within=NonNegativeReals)
     model.Fe = Param(model.G, initialize=Fe, within=NonNegativeReals)
-    model.soc_init = Param(model.G, initialize=soc_init, within=NonNegativeReals)
-    model.soc_max = Param(model.G, initialize=soc_max, within=NonNegativeReals)
+    model.soc_init = Param(model.G_s, initialize=soc_init, within=NonNegativeReals)
+    model.soc_max = Param(model.G_s, initialize=soc_max, within=NonNegativeReals)
 
     model.IN = Set(initialize=in_frac.keys(),
                      dimen=2,
@@ -132,14 +120,13 @@ def main():
                            initialize=lambda m, g, f: out_frac.get((g, f)),
                            within=NonNegativeReals)
 
-    model.IN.pprint()
-    model.OUT.pprint()
-
 
     # --- Variables ---
     model.FuelUseTotal     = Var(model.G,   model.T,      within=NonNegativeReals)
     model.FuelUse = Var(model.IN, model.T, within=NonNegativeReals)
     model.Generation = Var(model.OUT, model.T, within=NonNegativeReals)
+    model.Volume = Var(model.G_s, model.T, bounds= lambda m,g,t: (0, m.soc_max[g]), within=NonNegativeReals)
+    model.Charge = Var(model.G_s, model.T, domain=Binary)
 
     # # storage
     # model.FuelTotalSto  = Var(model.G_s,   model.T,      within=NonNegativeReals)
@@ -169,6 +156,44 @@ def main():
 
     model.CapProd = Constraint(model.G, model.T, rule=cap_prod)
 
+    def soc_level(m, g, t):
+        # 1) previous SoC
+        if t == m.T.first():
+            prev = m.soc_init[g]
+        else:
+            prev = m.Volume[g, m.T.prev(t)]
+        # 2) inflow
+        inflow = m.FuelUseTotal[g, t] * m.Fe[g]
+        # 3) outflow: only those (g,e) in your out_frac/export set
+        outflow = sum(
+            m.Generation[g, e, t] * m.out_frac[g, e]
+            for (gg, e) in m.OUT
+            if gg == g
+        )
+        return m.Volume[g, t] == prev + inflow - outflow
+
+    model.SOCBalance = Constraint(model.G_s, model.T, rule=soc_level)
+
+    def charging_max(m, g, t):
+        return m.FuelUseTotal[g, t] <= m.PMAX[g] * m.Charge[g, t]
+    model.ChargingStorageMax = Constraint(model.G_s, model.T, rule=charging_max)
+
+    def discharging_max(m, g, t):
+        outflow = sum(
+            m.Generation[g, e, t] * m.out_frac[g, e]
+            for (gg, e) in m.OUT
+            if gg == g
+        )
+        return outflow <= m.PMAX[g] * (1-m.Charge[g, t])
+    model.DischargingStorageMax = Constraint(model.G_s, model.T, rule=discharging_max)
+
+    def storage_cycle(m, g):
+        t_last = m.T.last()
+        return m.Volume[g, t_last] == m.soc_init[g]
+
+    model.StorageCycle = Constraint(model.G_s, rule=storage_cycle)
+
+
     # # debug: fix at max
     # for g in G:
     #     for t in T:
@@ -178,6 +203,7 @@ def main():
     model.obj = Objective(
         expr=sum(model.Generation[g, f, t]
                  for (g, f) in model.OUT
+                 if g in model.G_s
                  for t in model.T),
         sense=maximize
     )

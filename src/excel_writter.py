@@ -1,4 +1,5 @@
 import pandas as pd
+from pyomo.environ import value
 
 # After solving your model, collect production and storage results into DataFrames
 def export_results_to_excel(model, filename='results.xlsx'):
@@ -37,7 +38,7 @@ def export_results_to_excel(model, filename='results.xlsx'):
     df_stor = pd.DataFrame(stor_data)
 
     # Write to Excel with two sheets
-    with pd.ExcelWriter('/mnt/data/results.xlsx') as writer:
+    with pd.ExcelWriter('results.xlsx') as writer:
         df_prod.to_excel(writer, sheet_name='Production', index=False)
         df_stor.to_excel(writer, sheet_name='Storage', index=False)
 

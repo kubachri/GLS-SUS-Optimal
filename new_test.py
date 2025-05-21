@@ -90,6 +90,9 @@ def main():
     soc_init = {g: tech_df.at[g, 'InitialVolume'] for g in G_s}
     soc_max = {g: tech_df.at[g, 'StorageCap'] for g in G_s}
 
+    #Non-storage technologies
+    nonstor = [(g,f) for (g,f) in out_frac.keys() if g not in G_s]
+
 
     # 3) Build model
     model = ConcreteModel()
@@ -99,6 +102,7 @@ def main():
     model.F = Set(initialize=carriers)
     model.T = Set(initialize=T)
     model.G_s = Set(initialize=G_s, within=model.G)
+
 
     # --- Parameters ---
     model.PMAX = Param(model.G, initialize=Pmax, within=NonNegativeReals)
@@ -119,7 +123,8 @@ def main():
     model.out_frac = Param(model.OUT,
                            initialize=lambda m, g, f: out_frac.get((g, f)),
                            within=NonNegativeReals)
-
+    #for non-storage techs
+    model.OUT_nonstor = Set(initialize=nonstor, dimen=2, within=model.G*model.F)
 
     # --- Variables ---
     model.FuelUseTotal     = Var(model.G,   model.T,      within=NonNegativeReals)
@@ -144,11 +149,11 @@ def main():
 
     model.ProdFuelMix = Constraint(model.IN, model.T, rule=prod_fuelmix)
 
-    # 4.2) prod output
-    def prod_out(m, g, f, t):
-        return model.Generation[g, f, t] == model.out_frac[g, f] * model.FuelUseTotal[g, t] * model.Fe[g]
+    # 4.2) prod output only for non-storage techs
+    def prod_out_nonstor(m, g, f, t):
+        return m.Generation[g, f, t] == m.out_frac[g, f] * m.FuelUseTotal[g, t] * m.Fe[g]
 
-    model.ProdOut = Constraint(model.OUT, model.T, rule=prod_out)
+    model.ProdOut = Constraint(model.OUT_nonstor, model.T, rule=prod_out_nonstor)
 
     # 4.3) cap production
     def cap_prod(m, g, t):

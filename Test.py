@@ -5,8 +5,8 @@ from pyomo.environ import (
     ConcreteModel, Set, Param, Var, Constraint, Binary,
     NonNegativeReals, SolverFactory, Objective, maximize
 )
-import logging
-from pyomo.util.infeasible import log_infeasible_constraints
+from shapely.predicates import within
+
 from src.data_loader import load_data, load_techdata
 
 def main():
@@ -79,6 +79,20 @@ def main():
             for (_, e), v in out_items:
                 out_frac[(g, e)] = v / total_out
 
+    soc_init = {g: tech_df.at[g, 'InitialVolume'] for g in G_s}
+    soc_max = {g: tech_df.at[g, 'StorageCap'] for g in G_s}
+
+    pairs = [
+        (g, f)
+        for g in G
+        for f in F
+        if data['sigma_out'][(g,f)] == 1
+    ]
+
+    print('Pairs of tech-main product')
+    print(pairs)
+    print('----------')
+
     print('IN_FRAC')
     print('----------')
     print(in_frac)
@@ -87,6 +101,33 @@ def main():
     print('----------')
     print(out_frac)
     print('----------')
+
+     # 3) Build model
+    model = ConcreteModel()
+
+    # --- Sets ---
+    model.A = Set(initialize=A)
+    model.G = Set(initialize=G)
+    model.F = Set(initialize=F)
+    model.T = Set(initialize=T)
+    model.G_s = Set(initialize=G_s, within=model.G)
+    model.G_p = Set(initialize=G_p, within=model.G)
+    model.flowset = Set(initialize=flowset, within=model.A * model.A * model.F, dimen=3)
+    #'Link the technology with the fuel/energy which was designed and constraint e.g., electrolyzer to hydrogen, Methanol plant to methanol etc'
+    model.TechToEnergy = Set(initialize=pairs, within=model.G * model.F, dimen=2)
+
+
+    sigma_in    = data['sigma_in'].copy()
+    sigma_out   = data['sigma_out'].copy()
+    Pmax        = data.get('pmax', data['Pmax']).copy()
+    profile     = data['Profile']
+
+    location    = data['location']
+
+    flowset     = data['FlowSet']
+    A           = data['A']
+    Xcap        = data['Xcap']
+
 
 
 

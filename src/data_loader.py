@@ -330,7 +330,7 @@ def load_data():
      # --- location mapping from Location.inc ---
     loc = load_location_entries()
     # tech → area
-    data['area_of'] = { tech: area for area, tech in loc }
+    data['location'] = { tech: area for area, tech in loc }
 
     # area → list of tech: ensure every area appears, even if empty
     G_a = { a: [] for a in data['A'] }

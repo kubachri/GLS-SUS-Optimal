@@ -316,7 +316,7 @@ def load_data():
     Glue‐together all of the above into the dict your Pyomo model expects:
       A, T, FlowSet,
       G, F, G_s,
-      Pmax, Pmin, Rup, Rdown, Cvar, Cstart, SOC_max, SOC_init,
+      Capacity, Pmin, Rup, Rdown, Cvar, Cstart, SOC_max, SOC_init,
       sigma_in, sigma_out,
       Demand
     """
@@ -330,7 +330,7 @@ def load_data():
      # --- location mapping from Location.inc ---
     loc = load_location_entries()
     # tech → area
-    data['location'] = { tech: area for area, tech in loc }
+    data['location'] = loc
 
     # area → list of tech: ensure every area appears, even if empty
     G_a = { a: [] for a in data['A'] }
@@ -357,24 +357,24 @@ def load_data():
     }
 
     # techno‐economic params
-    Pmax = tech_df["Capacity"].to_dict()
-    data['Pmax']  = Pmax
+    capacity = tech_df["Capacity"].to_dict()
+    data['capacity']  = capacity
     # --- set up Pmin only when Minimum is a meaningful fraction (0 < Min < 1) ---
     data['Pmin'] = {}
     for g in data['G']:
         raw_min = tech_df.at[g, "Minimum"]  # the “Minimum” value from Techdata.inc
         if 0.0 < raw_min < 1.0:
-            # treat as fraction of Pmax
-            data['Pmin'][g] = raw_min * Pmax[g]
+            # treat as fraction of capacity
+            data['Pmin'][g] = raw_min * capacity[g]
         else:
             # no enforced minimum for this technology
             data['Pmin'][g] = 0.0
-    data['Rup']   = {g: tech_df.at[g,"RampRate"]  * Pmax[g] for g in data['G']}
+    data['Rup']   = {g: tech_df.at[g,"RampRate"]  * capacity[g] for g in data['G']}
     data['Rdown'] = data['Rup'].copy()
     data['Cvar']   = tech_df["VariableOmcost"].to_dict()
     data['Cstart'] = tech_df["StartupCost"].to_dict()
-    data['SOC_max']  = {g: tech_df.at[g,"StorageCap"]     * Pmax[g] for g in data['G_s']}
-    data['SOC_init'] = {g: tech_df.at[g,"InitialVolume"]  * Pmax[g] for g in data['G_s']}
+    data['SOC_max']  = {g: tech_df.at[g,"StorageCap"]     * capacity[g] for g in data['G_s']}
+    data['SOC_init'] = {g: tech_df.at[g,"InitialVolume"]  * capacity[g] for g in data['G_s']}
 
     # carrier‐mix → sigma_in / sigma_out
     sig_in, sig_out = {}, {}

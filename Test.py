@@ -5,6 +5,7 @@ from pyomo.environ import (
     ConcreteModel, Set, Param, Var, Constraint, Binary,
     NonNegativeReals, SolverFactory, Objective, maximize
 )
+from collections import defaultdict
 
 from src.data_loader import load_data, load_techdata
 
@@ -18,7 +19,7 @@ def main():
     T           = data['T']
     sigma_in    = data['sigma_in'].copy()
     sigma_out   = data['sigma_out'].copy()
-    Pmax        = data.get('pmax', data['Pmax']).copy()
+    capacity    = data.get('capacity', data['capacity']).copy()
     profile     = data['Profile']
     G_s         = data['G_s']
     G_p         = [g for g in G if g not in G_s]
@@ -27,6 +28,15 @@ def main():
     flowset     = data['FlowSet']
     A           = data['A']
     Xcap        = data['Xcap']
+    price_buy   = data['price_buy']
+    price_sell  = data["price_sell"]
+    cvar        = data['Cvar']
+    cstart      = data['Cstart']
+
+    print('Location:')
+    print(location)
+    print()
+
 
     # ─── 2.1) UC / RR / scale capacity ─────────────────────────────────
     orig_cap   = tech_df['Capacity'].copy()
@@ -47,7 +57,7 @@ def main():
     for g in tech_df.index:
         newc = sum_in_raw[g] * orig_cap[g]
         tech_df.at[g,'Capacity'] = newc
-        Pmax[g] = newc
+        capacity[g] = newc
     # ─────────────────────────────────────────────────────────────────
 
     # 2.b) Fe for every technology
@@ -77,16 +87,51 @@ def main():
 
     soc_init = {g: tech_df.at[g, 'InitialVolume'] for g in G_s}
     soc_max = {g: tech_df.at[g, 'StorageCap'] for g in G_s}
+    RampRate = tech_df['RampRate']
+    Minimum = tech_df['Minimum']
 
-    pairs = [
+    pairs_TechToEnergy = [
         (g, f)
         for g in G
         for f in F
         if data['sigma_out'][(g,f)] == 1
     ]
 
+    pairs_out = [
+        (g, f)
+        for g in G
+        for f in F
+        if sigma_out.get((g, f), 0.0) > 0.0
+    ]
+
+    pairs_in = [
+        (g, f)
+        for g in G
+        for f in F
+        if sigma_in.get((g, f), 0.0) > 0.0
+    ]
+
+    pairs_buy = sorted({
+    (area, energy)
+    for (area, energy, t), price in price_buy.items()
+    if price > 0.0
+    })
+
+    pairs_sale = sorted({
+    (area, energy)
+    for (area, energy, t), price in price_sell.items()
+    if price > 0.0
+    })
+
+    area_has = defaultdict(bool)
+    for (a, e, t), cap in Xcap.items():
+        if cap > 0.0:
+            area_has[a] = True
+
+    areas_with_lines = [a for a, has in area_has.items() if has]
+
     print('Pairs of tech-main product')
-    print(pairs)
+    print(pairs_TechToEnergy)
     print('----------')
 
     print('IN_FRAC')
@@ -110,20 +155,40 @@ def main():
     model.G_p = Set(initialize=G_p, within=model.G)
     model.flowset = Set(initialize=flowset, within=model.A * model.A * model.F, dimen=3)
     #'Link the technology with the fuel/energy which was designed and constraint e.g., electrolyzer to hydrogen, Methanol plant to methanol etc'
-    model.TechToEnergy = Set(initialize=pairs, within=model.G * model.F, dimen=2)
+    model.TechToEnergy = Set(initialize=pairs_TechToEnergy, within=model.G * model.F, dimen=2)
+    model.f_out = Set(initialize=pairs_out, within=model.G * model.F, dimen=2)
+    model.f_in = Set(initialize=pairs_in, within=model.G * model.F, dimen=2)
+    model.buyE = Set(initialize=pairs_buy, within=model.A * model.F, dimen=2)
+    model.saleE = Set(initialize=pairs_sale, within=model.A * model.F, dimen=2)
+    model.UC = Set(initialize=UC, within=model.G)
+    model.RR = Set(initialize=RR, within=model.G)
+    model.location = Set(initialize=location, within=model.A * model.G, dimen=2)
+    model.LinesInterconnectors = Set(initialize=areas_with_lines, within=model.A)
+
+    # --- Parameters ---
+    model.Profile = Param(model.G, model.T, initialize=profile, within=NonNegativeReals)
+    model.capacity = Param(model.G, initialize=capacity, within=NonNegativeReals)
+    model.Fe       = Param(model.G,          initialize=Fe,         within=NonNegativeReals)
+    model.soc_init = Param(model.G_s,        initialize=soc_init,   within=NonNegativeReals)
+    model.soc_max  = Param(model.G_s,        initialize=soc_max,    within=NonNegativeReals)
+    model.cstart   = Param(model.G, initialize=cstart, within=NonNegativeReals)
+    model.cvar = Param(model.G, initialize=cvar, within=NonNegativeReals)
+    model.RampRate = Param(model.G, initialize=RampRate, within=NonNegativeReals)
+    model.Minimum = Param(model.G, initialize=Minimum, within=NonNegativeReals)
+    model.in_frac  = Param(model.G, model.F,
+                           initialize=in_frac,
+                           within=NonNegativeReals)
+    model.out_frac = Param(model.G, model.F,
+                           initialize=out_frac,
+                           within=NonNegativeReals)
 
 
 
-    sigma_in    = data['sigma_in'].copy()
-    sigma_out   = data['sigma_out'].copy()
-    Pmax        = data.get('pmax', data['Pmax']).copy()
-    profile     = data['Profile']
 
-    location    = data['location']
 
-    flowset     = data['FlowSet']
-    A           = data['A']
-    Xcap        = data['Xcap']
+
+
+
 
 
 

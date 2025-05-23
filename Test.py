@@ -3,7 +3,8 @@ import os
 import pandas as pd
 from pyomo.environ import (
     ConcreteModel, Set, Param, Var, Constraint, Binary,
-    NonNegativeReals, SolverFactory, Objective, maximize
+    NonNegativeReals, SolverFactory, Objective, maximize,
+    Reals
 )
 from collections import defaultdict
 
@@ -32,11 +33,7 @@ def main():
     price_sell  = data["price_sell"]
     cvar        = data['Cvar']
     cstart      = data['Cstart']
-
-    print('Location:')
-    print(location)
-    print()
-
+    demand      = data['Demand']
 
     # ─── 2.1) UC / RR / scale capacity ─────────────────────────────────
     orig_cap   = tech_df['Capacity'].copy()
@@ -130,19 +127,6 @@ def main():
 
     areas_with_lines = [a for a, has in area_has.items() if has]
 
-    print('Pairs of tech-main product')
-    print(pairs_TechToEnergy)
-    print('----------')
-
-    print('IN_FRAC')
-    print('----------')
-    print(in_frac)
-    print('----------')
-    print('OUT_FRAC')
-    print('----------')
-    print(out_frac)
-    print('----------')
-
      # 3) Build model
     model = ConcreteModel()
 
@@ -175,24 +159,14 @@ def main():
     model.cvar = Param(model.G, initialize=cvar, within=NonNegativeReals)
     model.RampRate = Param(model.G, initialize=RampRate, within=NonNegativeReals)
     model.Minimum = Param(model.G, initialize=Minimum, within=NonNegativeReals)
-    model.in_frac  = Param(model.G, model.F,
-                           initialize=in_frac,
-                           within=NonNegativeReals)
-    model.out_frac = Param(model.G, model.F,
-                           initialize=out_frac,
-                           within=NonNegativeReals)
+    model.in_frac  = Param(model.G, model.F, initialize=in_frac, within=NonNegativeReals)
+    model.out_frac = Param(model.G, model.F, initialize=out_frac, within=NonNegativeReals)
+    model.demand = Param(model.A, model.F, model.T, initialize=demand, within=NonNegativeReals)
+    model.price_buy = Param(model.A, model.F, model.T, initialize=price_buy, within=Reals)
+    model.price_sale = Param(model.A, model.F, model.T, initialize=price_sell, within=Reals)
+    model.InterconnectorCapacity = Param(model.LinesInterconnectors, model.F, model.T, initialize=Xcap, within=NonNegativeReals)
 
-
-
-
-
-
-
-
-
-
-
-
+   # --- Variables ---
 
 
 if __name__ == "__main__":

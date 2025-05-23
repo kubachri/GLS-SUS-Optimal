@@ -5,7 +5,6 @@ from pyomo.environ import (
     ConcreteModel, Set, Param, Var, Constraint, Binary,
     NonNegativeReals, SolverFactory, Objective, maximize
 )
-from shapely.predicates import within
 
 from src.data_loader import load_data, load_techdata
 
@@ -28,9 +27,6 @@ def main():
     flowset     = data['FlowSet']
     A           = data['A']
     Xcap        = data['Xcap']
-
-    sigma_in  = data['sigma_in'].copy()
-    sigma_out = data['sigma_out'].copy()
 
     # ─── 2.1) UC / RR / scale capacity ─────────────────────────────────
     orig_cap   = tech_df['Capacity'].copy()
@@ -115,6 +111,7 @@ def main():
     model.flowset = Set(initialize=flowset, within=model.A * model.A * model.F, dimen=3)
     #'Link the technology with the fuel/energy which was designed and constraint e.g., electrolyzer to hydrogen, Methanol plant to methanol etc'
     model.TechToEnergy = Set(initialize=pairs, within=model.G * model.F, dimen=2)
+
 
 
     sigma_in    = data['sigma_in'].copy()

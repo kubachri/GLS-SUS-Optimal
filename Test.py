@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import pandas as pd
+from pygments.lexer import default
 from pyomo.environ import (
     ConcreteModel, Set, Param, Var, Constraint, Binary,
     NonNegativeReals, SolverFactory, Objective, maximize,
@@ -127,6 +128,8 @@ def main():
 
     areas_with_lines = [a for a, has in area_has.items() if has]
 
+    print(tech_df)
+
      # 3) Build model
     model = ConcreteModel()
 
@@ -134,7 +137,7 @@ def main():
     model.A = Set(initialize=A)
     model.G = Set(initialize=G)
     model.F = Set(initialize=F)
-    model.T = Set(initialize=T)
+    model.T = Set(initialize=T, ordered=True)
     model.G_s = Set(initialize=G_s, within=model.G)
     model.G_p = Set(initialize=G_p, within=model.G)
     model.flowset = Set(initialize=flowset, within=model.A * model.A * model.F, dimen=3)
@@ -148,6 +151,8 @@ def main():
     model.RR = Set(initialize=RR, within=model.G)
     model.location = Set(initialize=location, within=model.A * model.G, dimen=2)
     model.LinesInterconnectors = Set(initialize=areas_with_lines, within=model.A)
+
+    model.T.pprint()
 
     # --- Parameters ---
     model.Profile = Param(model.G, model.T, initialize=profile, within=NonNegativeReals)
@@ -164,7 +169,8 @@ def main():
     model.demand = Param(model.A, model.F, model.T, initialize=demand, within=NonNegativeReals)
     model.price_buy = Param(model.A, model.F, model.T, initialize=price_buy, within=Reals)
     model.price_sale = Param(model.A, model.F, model.T, initialize=price_sell, within=Reals)
-    model.InterconnectorCapacity = Param(model.LinesInterconnectors, model.F, model.T, initialize=Xcap, within=NonNegativeReals)
+    model.InterconnectorCapacity = Param(model.LinesInterconnectors, model.F, model.T,
+                                         initialize=Xcap, default= 0, within=NonNegativeReals)
 
    # --- Variables ---
     model.Cost = Var(domain=NonNegativeReals)
@@ -176,10 +182,173 @@ def main():
     model.Buy = Var(model.buyE, model.T, domain=NonNegativeReals)
     model.Sale = Var(model.saleE, model.T, domain=NonNegativeReals)
     model.Startcost = Var(model.G, model.T, domain=NonNegativeReals)
-    model.SlackDemandImport = Var(model.A, model.F, model.T, domain=NonNegativeReals)
-    model.SlackDemandExport = Var(model.A, model.F, model.T, domain=NonNegativeReals)
-    model.Online = Var(model.G_s, model.T, domain=Binary)
+    model.SlackDemandImport = Var(model.buyE, model.T, domain=NonNegativeReals)
+    model.SlackDemandExport = Var(model.saleE, model.T, domain=NonNegativeReals)
+    model.Online = Var(model.G, model.T, domain=Binary)
     model.Charge = Var(model.G_s, model.T, domain=Binary)
+
+    # --- Constraints ---
+
+    # 1) Flows imported to technologies
+    def fuelmix_rule(m, g, e, t):
+        if m.capacity[g] <= 0:
+            return Constraint.Skip
+        return m.in_frac[g,e] * m.Fuelusetotal[g,t] == m.Fueluse[g,e,t]
+    model.Fuelmix = Constraint(model.f_in, model.T, rule=fuelmix_rule)
+
+    # 2) Production for each non-storage technology
+    def production_rule(m, g, e, t):
+        if m.capacity[g] <= 0:
+            return Constraint.Skip
+        if g in m.G_s:
+            return Constraint.Skip
+        return m.out_frac[g,e] * m.Fuelusetotal[g,t] * m.Fe[g] == m.Generation[g,e,t]
+    model.Production = Constraint(model.f_out, model.T, rule=production_rule)
+
+    # 3) Storage constraints
+
+    def storage_balance_rule(m, g, t):
+        if g not in m.G_s:
+            return Constraint.Skip
+        prev = m.soc_init[g] if t==m.T.first() else m.Volume[g,m.T.prev(t)]
+        discharge = sum(
+            m.Generation[g,e,t] * m.out_frac[g,e]
+            for (gg,e) in m.f_out
+            if gg==g)
+        return m.Volume[g,t] == prev + m.Fuelusetotal[g,t] * m.Fe[g] - discharge
+    model.ProductionStorage = Constraint(model.G_s, model.T, rule=storage_balance_rule)
+
+    def charging_max(m, g, t):
+        if g not in m.G_s:
+            return Constraint.Skip
+        return m.Fuelusetotal[g,t] <= m.capacity[g] * m.Charge[g,t]
+    model.ChargingStorageMax = Constraint(model.G_s, model.T, rule=charging_max)
+
+    def discharging_max(m, g, t):
+        if g not in m.G_s:
+            return Constraint.Skip
+        discharge = sum(
+            m.Generation[g,e,t] * m.out_frac[g,e]
+            for (gg,e) in m.f_out
+            if gg==g)
+        return discharge <= m.capacity[g] * (1-m.Charge[g,t])
+    model.DishargingStorageMax = Constraint(model.G_s, model.T, rule=discharging_max)
+
+    def charging_min(m, g, t):
+        if g not in m.G_s or m.Minimum[g] <=0 :
+            return Constraint.Skip
+        return m.Fuelusetotal[g,t] <= m.Minimum[g] * m.Charge[g,t]
+    model.ChargingStorageMin = Constraint(model.G_s, model.T, rule=charging_min)
+
+    def discharging_min(m, g, t):
+        if g not in m.G_s or m.Minimum[g] <=0:
+            return Constraint.Skip
+        discharge = sum(
+            m.Generation[g,e,t] * m.out_frac[g,e]
+            for (gg,e) in m.f_out
+            if gg==g)
+        return discharge <= m.Minimum[g] * (1-m.Charge[g,t])
+    model.DishargingStorageMin = Constraint(model.G_s, model.T, rule=discharging_min)
+
+    def volume_upper_rule(m, g, t):
+        return m.Volume[g, t] <= m.soc_max[g]
+    model.VolumeUpper = Constraint(model.G_s, model.T, rule=volume_upper_rule)
+
+    def volume_final_soc(m, g):
+        return m.Volume[g, m.T.last()] == m.soc_init[g]
+    model.TerminalSOC = Constraint(model.G_s, rule=volume_final_soc)
+
+
+
+
+
+    # 1) MaxBuy
+    def max_buy_rule(m, e, t):
+        # total capacity for e,t across your interconnector‐areas
+        total_cap = sum(
+            m.InterconnectorCapacity[a,e,t]
+            for a in m.LinesInterconnectors
+            if (a,e,t) in m.InterconnectorCapacity.index_set()
+        )
+        if total_cap <= 0:
+            # no lines for this energy/time → skip
+            return Constraint.Skip
+        # sum of all buys for this energy/time
+        lhs = sum(
+            m.Buy[a,e,t]
+            for (a,f) in m.buyE
+            if f == e
+        )
+        # average capacity per area:
+        rhs = total_cap / len(m.LinesInterconnectors)
+        return lhs <= rhs
+    model.MaxBuy = Constraint(model.F, model.T, rule=max_buy_rule)
+
+
+    # 2) MaxSale (analogous)
+    def max_sale_rule(m, e, t):
+        total_cap = sum(
+            m.InterconnectorCapacity[a,e,t]
+            for a in m.LinesInterconnectors
+            if (a,e,t) in m.InterconnectorCapacity.index_set()
+        )
+        if total_cap <= 0:
+            return Constraint.Skip
+        lhs = sum(
+            m.Sale[a,e,t]
+            for (a,f) in m.saleE
+            if f == e
+        )
+        rhs = total_cap / len(m.LinesInterconnectors)
+        return lhs <= rhs
+    model.MaxSale = Constraint(model.F, model.T, rule=max_sale_rule)
+
+
+    # --- after you’ve declared Fuelmix & Production ---
+
+    # 1) One example per (tech,energy) from Fuelmix
+    print("\n--- Fuelmix (one example per tech–energy) ---")
+    seen_fe = set()
+    for (g, e, t), con in model.Fuelmix.items():
+        if (g,e) in seen_fe:
+            continue
+        seen_fe.add((g,e))
+        print(f"{(g,e,t)} : {con.lower} : {con.body} : {con.upper}")
+    print(f"... printed {len(seen_fe)} of {len(model.f_in)} total Fuelmix constraints")
+
+    # 2) One example per (tech,energy) from Production
+    print("\n--- Production (one example per tech–energy) ---")
+    seen_po = set()
+    for (g, e, t), con in model.Production.items():
+        if (g,e) in seen_po:
+            continue
+        seen_po.add((g,e))
+        print(f"{(g,e,t)} : {con.lower} : {con.body} : {con.upper}")
+    print(f"... printed {len(seen_po)} of {len(model.f_out)} total Production constraints")
+
+    # --- Sample print for MaxBuy: one example per energy ---
+    print("\n--- MaxBuy (one example per energy) ---")
+    seen_e = set()
+    for (e, t), con in model.MaxBuy.items():
+        if e in seen_e:
+            continue
+        seen_e.add(e)
+        print(f"  ({e}, {t}) : {con.lower} : {con.body} : {con.upper}")
+        if len(seen_e) == len(model.F):
+            break
+    print(f"... printed {len(seen_e)} of {len(model.F)} energies")
+
+    # --- Likewise for MaxSale ---
+    print("\n--- MaxSale (one example per energy) ---")
+    seen_e = set()
+    for (e, t), con in model.MaxSale.items():
+        if e in seen_e:
+            continue
+        seen_e.add(e)
+        print(f"  ({e}, {t}) : {con.lower} : {con.body} : {con.upper}")
+        if len(seen_e) == len(model.F):
+            break
+    print(f"... printed {len(seen_e)} of {len(model.F)} energies")
 
 
 if __name__ == "__main__":

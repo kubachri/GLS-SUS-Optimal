@@ -167,6 +167,19 @@ def main():
     model.InterconnectorCapacity = Param(model.LinesInterconnectors, model.F, model.T, initialize=Xcap, within=NonNegativeReals)
 
    # --- Variables ---
+    model.Cost = Var(domain=NonNegativeReals)
+    model.Fueluse = Var(model.f_in, model.T, domain=NonNegativeReals)
+    model.Fuelusetotal = Var(model.G, model.T, domain=NonNegativeReals)
+    model.Generation = Var(model.f_out, model.T, domain=NonNegativeReals)
+    model.Volume = Var(model.G_s, model.T, domain=NonNegativeReals)
+    model.Flow = Var(model.flowset, model.T, domain=NonNegativeReals)
+    model.Buy = Var(model.buyE, model.T, domain=NonNegativeReals)
+    model.Sale = Var(model.saleE, model.T, domain=NonNegativeReals)
+    model.Startcost = Var(model.G, model.T, domain=NonNegativeReals)
+    model.SlackDemandImport = Var(model.A, model.F, model.T, domain=NonNegativeReals)
+    model.SlackDemandExport = Var(model.A, model.F, model.T, domain=NonNegativeReals)
+    model.Online = Var(model.G_s, model.T, domain=Binary)
+    model.Charge = Var(model.G_s, model.T, domain=Binary)
 
 
 if __name__ == "__main__":

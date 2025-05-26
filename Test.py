@@ -259,6 +259,70 @@ def main():
     model.TerminalSOC = Constraint(model.G_s, rule=volume_final_soc)
 
 
+    # 4) Energy balance equations
+    def balance_rule(m, a, e, t):
+        # 1) GAMS $‐guard: buyE(a,e) OR saleE(a,e) OR any tech at area a with (in or out) of e
+        has_buy  = (a,e) in m.buyE
+        has_sale = (a,e) in m.saleE
+        # find all techs located in area a
+        techs_in_area = [tech for (area,tech) in m.location if area==a]
+        has_tech = any(
+            ((tech,e) in m.f_in) or ((tech,e) in m.f_out)
+            for tech in techs_in_area
+        )
+        if not (has_buy or has_sale or has_tech):
+            return Constraint.Skip
+        # 2) Left‐hand side: Buy + inbound flows + local generation
+        buy_term = m.Buy[a,e,t] if has_buy else 0.0
+        inflow   = sum(
+            m.Flow[area_in, a, e, t]
+            for (area_in, area_to, energy) in m.flowset
+            if (area_to==a and energy==e)
+        )
+        generation = sum(
+            m.Generation[tech, e, t]
+            for tech in techs_in_area
+            if (tech,e) in m.f_out
+        )
+        # 3) Right‐hand side: local fuel use + Sale + outbound flows
+        fueluse   = sum(
+            m.Fueluse[tech, e, t]
+            for tech in techs_in_area
+            if (tech,e) in m.f_in
+        )
+        sale_term = m.Sale[a,e,t] if has_sale else 0.0
+        outflow   = sum(
+            m.Flow[a, area_out, e, t]
+            for (area_from, area_out, energy) in m.flowset
+            if (area_from==a and energy==e)
+        )
+        # 4) Assemble the balance
+        return buy_term + inflow + generation == fueluse + sale_term + outflow
+    model.Balance = Constraint(model.A, model.F, model.T, rule=balance_rule)
+
+    def demand_time_rule(m, a, e, t):
+        # 1) GAMS $-guard: only if there is any demand at all for (a,e)
+        total_area_energy = sum(m.demand[a,e,tt] for tt in m.T)
+        if total_area_energy <= 0:
+            return Constraint.Skip
+
+        # 2) LHS terms, zero when not defined in the corresponding set
+        sale_term = m.Sale[a,e,t] if (a,e) in m.saleE else 0.0
+        slack_imp = m.SlackDemandImport[a,e,t] if (a,e) in m.buyE  else 0.0
+        slack_exp = m.SlackDemandExport[a,e,t] if (a,e) in m.saleE else 0.0
+
+        lhs = sale_term + slack_imp - slack_exp
+
+        # 3) RHS is the exact demand
+        rhs = m.demand[a,e,t]
+
+        # 4) GAMS “=G=” → lhs >= rhs
+        return lhs >= rhs
+
+    model.DemandTime = Constraint(model.saleE, model.T, rule=demand_time_rule)
+
+
+
 
 
 
@@ -350,6 +414,60 @@ def main():
             break
     print(f"... printed {len(seen_e)} of {len(model.F)} energies")
 
+
+    # ─── Test: force all non‐storage to max output ────────────────────────
+    def force_max_gen(m, g, e, t):
+        # only for non‐storage export links
+        if (g,e) not in m.f_out or g in m.G_s:
+            return Constraint.Skip
+        # force Generation = capacity * export‐fraction
+        return m.Generation[g,e,t] == m.capacity[g] * m.out_frac[g,e]
+    model.ForceMaxGen = Constraint(model.f_out, model.T, rule=force_max_gen)
+
+    # ─── Objective: Maximize total storage discharge ─────────────────────────
+    def max_discharge_obj(m):
+        return sum(
+            m.Generation[g, e, t] * m.out_frac[g, e]
+            for (g, e) in m.f_out
+            if g in m.G_s
+            for t in m.T
+        )
+    model.MaxDischarge = Objective(rule=max_discharge_obj, sense=maximize)
+
+    # ─── Solve with Gurobi ───────────────────────────────────────────────────
+    solver = SolverFactory('gurobi')
+    results = solver.solve(model, tee=True)
+    model.solutions.load_from(results)   # ensure values are loaded
+
+    # ─── Report storage charge/discharge/SOC/FueluseTotal ─────────────────
+    print("\n=== Storage detailed report by hour ===")
+    for g in model.G_s:
+        # find the energy key for hydrogen in this tech's input‐mix
+        hydrogen_energy = next(
+            e for (gg, e) in model.f_in
+            if gg == g and 'Hydrogen' in e
+        )
+
+        print(f"\n--- Storage tech: {g} ---")
+        print(f"{'Hour':>8} | {'FuelUseTotal':>12} | {'Charge(H2)':>12} | {'Discharge':>10} | {'SOC':>8}")
+        print("-"*62)
+        for t in model.T:
+            fuel_total    = model.Fuelusetotal[g, t].value or 0.0
+            # only the hydrogen share of the total goes into storage
+            charge_amt    = fuel_total * model.in_frac[g, hydrogen_energy]
+            # actual discharge energy
+            discharge_amt = sum(
+                model.Generation[g, e, t].value * model.out_frac[g, e]
+                for (gg, e) in model.f_out
+                if gg == g
+            ) or 0.0
+            soc           = model.Volume[g, t].value or 0.0
+
+            print(f"{t:>8} | {fuel_total:12.3f} | {charge_amt:12.3f} | {discharge_amt:10.3f} | {soc:8.3f}")
+
+
+
+    return
 
 if __name__ == "__main__":
     main()

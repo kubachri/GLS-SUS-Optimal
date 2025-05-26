@@ -15,23 +15,35 @@ def main():
 
     # 2) Extract sets & raw parameters
     G           = data['G']
-    T           = data['T']
+    T_all       = data['T']
     sigma_in    = data['sigma_in'].copy()
     sigma_out   = data['sigma_out'].copy()
-    capacity    = data.get('capacity', data['capacity']).copy()
-    profile     = data['Profile']
     G_s         = data['G_s']
     G_p         = [g for g in G if g not in G_s]
     location    = data['location']
     F           = data['F']
     flowset     = data['FlowSet']
     A           = data['A']
-    Xcap        = data['Xcap']
-    price_buy   = data['price_buy']
-    price_sell  = data["price_sell"]
     cvar        = data['Cvar']
     cstart      = data['Cstart']
-    demand      = data['Demand']
+
+    tech_df.loc[G_s, 'Capacity'] = tech_df.loc[G_s, 'StorageCap']
+    capacity = data.get('capacity', data['capacity']).copy()
+
+    # ── 🛠  TEST MODE: limit the horizon ───────────────────────────
+    N_test = 5
+    def hour_index(h):
+        return int(h.split('-')[1])
+    T = sorted(T_all, key=hour_index)[:N_test]
+    print("Using only these hours:", T)
+    # ───────────────────────────────────────────────────────────────
+
+    profile = {(g, t): v for (g, t), v in data['Profile'].items() if t in T}
+    demand = {(a, e, t): v for (a, e, t), v in data['Demand'].items() if t in T}
+    price_buy = {(a, e, t): v for (a, e, t), v in data['price_buy'].items() if t in T}
+    price_sell = {(a, e, t): v for (a, e, t), v in data['price_sell'].items() if t in T}
+    Xcap = {(a, f, t): v for (a, f, t), v in data['Xcap'].items() if t in T}
+
 
     # ─── 2.1) UC / RR / scale capacity ─────────────────────────────────
     orig_cap   = tech_df['Capacity'].copy()
@@ -179,6 +191,8 @@ def main():
     model.SlackDemandExport = Var(model.saleE, model.T, domain=NonNegativeReals)
     model.Online = Var(model.G, model.T, domain=Binary)
     model.Charge = Var(model.G_s, model.T, domain=Binary)
+
+    model.capacity.pprint()
 
     # --- Constraints ---
     # 1) Flows imported to technologies
@@ -501,5 +515,41 @@ if __name__ == "__main__":
     m.solutions.load_from(results)
 
     print(f"\n>> Objective = {value(m.Obj):.3f}")
+
+    print("\n--- GAMS-style Sample equations (one per prefix) ---\n")
+    for cname, con in m.component_map(Constraint).items():
+        if not con.active:
+            continue
+        # pick an example index (the first) for this constraint
+        if con.is_indexed():
+            idx = next(iter(con))
+            cdata = con[idx]
+            # only print each constraint name once
+            header = f"{cname}({','.join(str(i) for i in idx)})"
+        else:
+            idx = None
+            cdata = con
+            header = cname
+
+        # figure out sense and RHS
+        lb = cdata.lower
+        ub = cdata.upper
+        if lb is not None and ub is not None and lb == ub:
+            sense = "=E="
+            rhs = lb
+        elif ub is not None:
+            sense = "=L="
+            rhs = ub
+        elif lb is not None:
+            sense = "=G="
+            rhs = lb
+        else:
+            sense = "??"
+            rhs = 0
+
+        body_str = str(cdata.body)  # e.g. "- Fueluse[...] + Generation[...] - Flow[...]"
+        val = value(cdata.body)
+
+        print(f"{header}..  {body_str}  {sense}  {rhs} ;   (LHS = {val:.6g})")
 
     export_results_to_excel()

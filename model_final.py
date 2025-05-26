@@ -2,7 +2,7 @@
 import os
 from pyomo.environ import (
     ConcreteModel, Set, Param, Var, Constraint, Binary,
-    NonNegativeReals, Objective, minimize, Reals
+    NonNegativeReals, Objective, maximize, Reals
 )
 from collections import defaultdict
 
@@ -31,7 +31,7 @@ def main():
     capacity = data.get('capacity', data['capacity']).copy()
 
     # ── 🛠  TEST MODE: limit the horizon ───────────────────────────
-    N_test = 5
+    N_test = 168
     def hour_index(h):
         return int(h.split('-')[1])
     T = sorted(T_all, key=hour_index)[:N_test]
@@ -43,7 +43,6 @@ def main():
     price_buy = {(a, e, t): v for (a, e, t), v in data['price_buy'].items() if t in T}
     price_sell = {(a, e, t): v for (a, e, t), v in data['price_sell'].items() if t in T}
     Xcap = {(a, f, t): v for (a, f, t), v in data['Xcap'].items() if t in T}
-
 
     # ─── 2.1) UC / RR / scale capacity ─────────────────────────────────
     orig_cap   = tech_df['Capacity'].copy()
@@ -178,7 +177,7 @@ def main():
                                          initialize=Xcap, default= 0, within=NonNegativeReals)
 
    # --- Variables ---
-    model.Cost = Var(domain=NonNegativeReals)
+    model.Profit = Var(domain=NonNegativeReals)
     model.Fueluse = Var(model.f_in, model.T, domain=NonNegativeReals)
     model.Fuelusetotal = Var(model.G, model.T, domain=NonNegativeReals)
     model.Generation = Var(model.f_out, model.T, domain=NonNegativeReals)
@@ -191,8 +190,6 @@ def main():
     model.SlackDemandExport = Var(model.saleE, model.T, domain=NonNegativeReals)
     model.Online = Var(model.G, model.T, domain=Binary)
     model.Charge = Var(model.G_s, model.T, domain=Binary)
-
-    model.capacity.pprint()
 
     # --- Constraints ---
     # 1) Flows imported to technologies
@@ -237,23 +234,23 @@ def main():
             for (gg,e) in m.f_out
             if gg==g)
         return discharge <= m.capacity[g] * (1-m.Charge[g,t])
-    model.DishargingStorageMax = Constraint(model.G_s, model.T, rule=discharging_max)
+    model.DisChargingStorageMax = Constraint(model.G_s, model.T, rule=discharging_max)
 
-    def charging_min(m, g, t):
-        if g not in m.G_s or m.Minimum[g] <=0 :
-            return Constraint.Skip
-        return m.Fuelusetotal[g,t] <= m.Minimum[g] * m.Charge[g,t]
-    model.ChargingStorageMin = Constraint(model.G_s, model.T, rule=charging_min)
-
-    def discharging_min(m, g, t):
-        if g not in m.G_s or m.Minimum[g] <=0:
-            return Constraint.Skip
-        discharge = sum(
-            m.Generation[g,e,t] * m.out_frac[g,e]
-            for (gg,e) in m.f_out
-            if gg==g)
-        return discharge <= m.Minimum[g] * (1-m.Charge[g,t])
-    model.DishargingStorageMin = Constraint(model.G_s, model.T, rule=discharging_min)
+    # def charging_min(m, g, t):
+    #     if g not in m.G_s or m.Minimum[g] <=0 :
+    #         return Constraint.Skip
+    #     return m.Fuelusetotal[g,t] <= m.Minimum[g] * m.Charge[g,t]
+    # model.ChargingStorageMin = Constraint(model.G_s, model.T, rule=charging_min)
+    #
+    # def discharging_min(m, g, t):
+    #     if g not in m.G_s or m.Minimum[g] <=0:
+    #         return Constraint.Skip
+    #     discharge = sum(
+    #         m.Generation[g,e,t] * m.out_frac[g,e]
+    #         for (gg,e) in m.f_out
+    #         if gg==g)
+    #     return discharge <= m.Minimum[g] * (1-m.Charge[g,t])
+    # model.DisChargingStorageMin = Constraint(model.G_s, model.T, rule=discharging_min)
 
     def volume_upper_rule(m, g, t):
         return m.Volume[g, t] <= m.soc_max[g]
@@ -361,6 +358,21 @@ def main():
         return lhs <= rhs
     model.MaxSale = Constraint(model.F, model.T, rule=max_sale_rule)
 
+    # def sale_cap_rule(m, a, e, t):
+    #     # only where sales are defined
+    #     if (a, e) not in m.saleE:
+    #         return Constraint.Skip
+    #     return m.Sale[a, e, t] <= 500
+    # model.SaleCap = Constraint(model.saleE, model.T, rule=sale_cap_rule)
+
+    def availability_rule(m, g, t):
+        # skip storage, skip zero‐cap techs
+        if g in m.G_s or m.capacity[g] <= 0:
+            return Constraint.Skip
+        # total fuel‐use (pre‐efficiency) cannot exceed capacity×profile
+        return m.Fuelusetotal[g, t] <= m.capacity[g] * m.Profile[g, t]
+    model.Availability = Constraint(model.G_p, model.T, rule=availability_rule)
+
     # 8) Ramp-up: (Generation[t] – Generation[t-1])/Fe ≤ LHS
     def ramp_up_rule(m, g, t):
         # only where a nonzero RampRate exists
@@ -434,7 +446,7 @@ def main():
     penalty = 1e6   # for example
 
     # 2) Cost‐definition constraint: mirror your GAMS “Cost =E= …”
-    def cost_definition_rule(m):
+    def profit_definition_rule(m):
         # a) Fuel cost (imports are a positive cost → negative in objective)
         imp_cost = sum(
             m.price_buy[a,e,t] * m.Buy[a,e,t]
@@ -466,16 +478,16 @@ def main():
         )
 
         # GAMS: Cost =E= -imp_cost + sale_rev - var_om - startup - penalty*slack
-        return m.Cost == (
+        return m.Profit == (
            - imp_cost
            + sale_rev
            - var_om
            - startup
            - penalty * slack
         )
-    model.CostDefinition = Constraint(rule=cost_definition_rule)
+    model.ProfitDefinition = Constraint(rule=profit_definition_rule)
     # 3) Objective: minimize the Cost variable
-    model.Obj = Objective(expr=model.Cost, sense=minimize)
+    model.Obj = Objective(expr=model.Profit, sense=maximize)
 
     return model
 
@@ -486,70 +498,129 @@ if __name__ == "__main__":
 
     m = main()   # make sure main() returns the model!
 
-    print("\n--- Sample constraint rows (one per “prefix”) ---\n")
-    for c in m.component_objects(Constraint, active=True):
-        comp = getattr(m, c.name)
-        print(f"Constraint: {c.name}")
-        if comp.is_indexed():
-            seen = set()
-            for idx in comp:
-                prefix = idx[:-1] if isinstance(idx, tuple) else idx
-                if prefix in seen:
-                    continue
-                seen.add(prefix)
-                row = comp[idx]
-                print(f"  {c.name}{idx} : {row.body}")
-        else:
-            # scalar constraint → just print its bounds, not the huge body
-            lb = comp.lower() if comp.has_lb() else None
-            ub = comp.upper() if comp.has_ub() else None
-            print(f"  {c.name} : ", end="")
-            if lb is not None:  print(f"LB={lb}  ", end="")
-            if ub is not None:  print(f"UB={ub}", end="")
-            print()
-        print()
+
+    # print("\n--- Sample constraint rows (one per “prefix”) ---\n")
+    # for c in m.component_objects(Constraint, active=True):
+    #     comp = getattr(m, c.name)
+    #     print(f"Constraint: {c.name}")
+    #     if comp.is_indexed():
+    #         seen = set()
+    #         for idx in comp:
+    #             prefix = idx[:-1] if isinstance(idx, tuple) else idx
+    #             if prefix in seen:
+    #                 continue
+    #             seen.add(prefix)
+    #             row = comp[idx]
+    #             print(f"  {c.name}{idx} : {row.body}")
+    #     else:
+    #         # scalar constraint → just print its bounds, not the huge body
+    #         lb = comp.lower() if comp.has_lb() else None
+    #         ub = comp.upper() if comp.has_ub() else None
+    #         print(f"  {c.name} : ", end="")
+    #         if lb is not None:  print(f"LB={lb}  ", end="")
+    #         if ub is not None:  print(f"UB={ub}", end="")
+    #         print()
+    #     print()
 
     # --- Now solve ---
-    solver = SolverFactory('gurobi')   # or 'glpk'
-    results = solver.solve(m, tee=True)
-    m.solutions.load_from(results)
+    # 1) Write out a fully‐labeled LP so you can see the mapping back to your Pyomo names.
+    # m.write("model.lp", io_options={'symbolic_solver_labels': True})
+    #
+    # # 2) Grab Gurobi’s “direct” interface so we can call computeIIS()
+    # solver = SolverFactory('gurobi_direct')
+    #
+    # # 3) Solve, but don’t load any (non‐existent) solution.
+    # results = solver.solve(m, tee=True, load_solutions=False)
+    #
+    # # 4) If Gurobi says infeasible, ask it for an IIS and write it to disk:
+    # gmodel = solver._solver_model
+    # gmodel.computeIIS()
+    # gmodel.write("model.ilp")
+    # print(">>> Wrote IIS to model.ilp – open it in a text editor to see the minimal conflicting rows and columns.")
+    #
+    # print(f"\n>> Objective = {value(m.Obj):.3f}")
 
-    print(f"\n>> Objective = {value(m.Obj):.3f}")
+    solver = SolverFactory('gurobi')
+    solver.options['MIPGap']    = 0.10
+    solver.solve(m, tee=True)
 
-    print("\n--- GAMS-style Sample equations (one per prefix) ---\n")
-    for cname, con in m.component_map(Constraint).items():
-        if not con.active:
-            continue
-        # pick an example index (the first) for this constraint
-        if con.is_indexed():
-            idx = next(iter(con))
-            cdata = con[idx]
-            # only print each constraint name once
-            header = f"{cname}({','.join(str(i) for i in idx)})"
-        else:
-            idx = None
-            cdata = con
-            header = cname
 
-        # figure out sense and RHS
-        lb = cdata.lower
-        ub = cdata.upper
-        if lb is not None and ub is not None and lb == ub:
-            sense = "=E="
-            rhs = lb
-        elif ub is not None:
-            sense = "=L="
-            rhs = ub
-        elif lb is not None:
-            sense = "=G="
-            rhs = lb
-        else:
-            sense = "??"
-            rhs = 0
 
-        body_str = str(cdata.body)  # e.g. "- Fueluse[...] + Generation[...] - Flow[...]"
-        val = value(cdata.body)
+    # print("\n--- GAMS-style Sample equations (one per prefix) ---\n")
+    #
+    # skipped_constraints = []
+    #
+    # for cname, con in m.component_map(Constraint).items():
+    #     if not con.active:
+    #         continue
+    #
+    #     # if it’s an indexed constraint, check if any instances survived
+    #     if con.is_indexed():
+    #         if len(con) == 0:
+    #             skipped_constraints.append(cname)
+    #             continue
+    #         idx = next(iter(con))
+    #         cdata = con[idx]
+    #         header = f"{cname}({','.join(str(i) for i in idx)})"
+    #     else:
+    #         cdata = con
+    #         header = cname
+    #
+    #     # determine sense and RHS
+    #     lb, ub = cdata.lower, cdata.upper
+    #     if lb is not None and ub is not None and lb == ub:
+    #         sense, rhs = "=E=", lb
+    #     elif ub is not None:
+    #         sense, rhs = "=L=", ub
+    #     elif lb is not None:
+    #         sense, rhs = "=G=", lb
+    #     else:
+    #         sense, rhs = "??", 0
+    #
+    #     body_str = str(cdata.body)
+    #     val = value(cdata.body)
+    #
+    #     print(f"{header}..  {body_str}  {sense}  {rhs} ;   (LHS = {val:.6g})")
 
-        print(f"{header}..  {body_str}  {sense}  {rhs} ;   (LHS = {val:.6g})")
+    # if skipped_constraints:
+    #     print("\n(Note: the following constraint sets had all their "
+    #           "instances skipped by your $-guards and were not printed:)")
+    #     for name in skipped_constraints:
+    #         print("  -", name)
+
+    # print("\n--- All constraints touching HydrogenStorage or Hydrogen ---\n")
+    # for cname, con in m.component_map(Constraint).items():
+    #     if not con.active or not con.is_indexed():
+    #         continue
+    #     for idx in con:
+    #         if 'HydrogenStorage' in idx or 'Hydrogen' in idx:
+    #             cdata = con[idx]
+    #
+    #             # 1) clean header
+    #             hdr = f"{cname}({','.join(idx)})"
+    #
+    #             # 2) detect sense & RHS, cast to float
+    #             lb, ub = cdata.lower, cdata.upper
+    #             if lb is not None and ub is not None and lb == ub:
+    #                 sense = "=E="
+    #                 rhs = float(value(lb))
+    #             elif ub is not None:
+    #                 sense = "=L="
+    #                 rhs = float(value(ub))
+    #             elif lb is not None:
+    #                 sense = "=G="
+    #                 rhs = float(value(lb))
+    #             else:
+    #                 sense = "??"
+    #                 rhs = 0.0
+    #
+    #             # 3) massage body
+    #             raw = str(cdata.body)
+    #             body = raw.replace("[", "(").replace("]", ")").replace("'", "")
+    #
+    #             # 4) evaluate LHS value
+    #             lhs_val = float(value(cdata.body))
+    #
+    #             print(f"{hdr}..  {body}  {sense}  {rhs:g} ;   (LHS = {lhs_val:g})")
 
     export_results_to_excel()

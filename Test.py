@@ -4,7 +4,7 @@ import pandas as pd
 from pygments.lexer import default
 from pyomo.environ import (
     ConcreteModel, Set, Param, Var, Constraint, Binary,
-    NonNegativeReals, SolverFactory, Objective, maximize,
+    NonNegativeReals, SolverFactory, Objective, minimize,
     Reals
 )
 from collections import defaultdict
@@ -152,8 +152,6 @@ def main():
     model.location = Set(initialize=location, within=model.A * model.G, dimen=2)
     model.LinesInterconnectors = Set(initialize=areas_with_lines, within=model.A)
 
-    model.T.pprint()
-
     # --- Parameters ---
     model.Profile = Param(model.G, model.T, initialize=profile, within=NonNegativeReals)
     model.capacity = Param(model.G, initialize=capacity, within=NonNegativeReals)
@@ -188,7 +186,6 @@ def main():
     model.Charge = Var(model.G_s, model.T, domain=Binary)
 
     # --- Constraints ---
-
     # 1) Flows imported to technologies
     def fuelmix_rule(m, g, e, t):
         if m.capacity[g] <= 0:
@@ -206,7 +203,6 @@ def main():
     model.Production = Constraint(model.f_out, model.T, rule=production_rule)
 
     # 3) Storage constraints
-
     def storage_balance_rule(m, g, t):
         if g not in m.G_s:
             return Constraint.Skip
@@ -258,7 +254,6 @@ def main():
         return m.Volume[g, m.T.last()] == m.soc_init[g]
     model.TerminalSOC = Constraint(model.G_s, rule=volume_final_soc)
 
-
     # 4) Energy balance equations
     def balance_rule(m, a, e, t):
         # 1) GAMS $‐guard: buyE(a,e) OR saleE(a,e) OR any tech at area a with (in or out) of e
@@ -300,33 +295,24 @@ def main():
         return buy_term + inflow + generation == fueluse + sale_term + outflow
     model.Balance = Constraint(model.A, model.F, model.T, rule=balance_rule)
 
+    # 5) Demand constraint
     def demand_time_rule(m, a, e, t):
         # 1) GAMS $-guard: only if there is any demand at all for (a,e)
         total_area_energy = sum(m.demand[a,e,tt] for tt in m.T)
         if total_area_energy <= 0:
             return Constraint.Skip
-
         # 2) LHS terms, zero when not defined in the corresponding set
         sale_term = m.Sale[a,e,t] if (a,e) in m.saleE else 0.0
         slack_imp = m.SlackDemandImport[a,e,t] if (a,e) in m.buyE  else 0.0
         slack_exp = m.SlackDemandExport[a,e,t] if (a,e) in m.saleE else 0.0
-
         lhs = sale_term + slack_imp - slack_exp
-
         # 3) RHS is the exact demand
         rhs = m.demand[a,e,t]
-
         # 4) GAMS “=G=” → lhs >= rhs
         return lhs >= rhs
-
     model.DemandTime = Constraint(model.saleE, model.T, rule=demand_time_rule)
 
-
-
-
-
-
-    # 1) MaxBuy
+    # 6) MaxBuy
     def max_buy_rule(m, e, t):
         # total capacity for e,t across your interconnector‐areas
         total_cap = sum(
@@ -348,8 +334,7 @@ def main():
         return lhs <= rhs
     model.MaxBuy = Constraint(model.F, model.T, rule=max_buy_rule)
 
-
-    # 2) MaxSale (analogous)
+    # 7) MaxSale (analogous)
     def max_sale_rule(m, e, t):
         total_cap = sum(
             m.InterconnectorCapacity[a,e,t]
@@ -367,107 +352,159 @@ def main():
         return lhs <= rhs
     model.MaxSale = Constraint(model.F, model.T, rule=max_sale_rule)
 
-
-    # --- after you’ve declared Fuelmix & Production ---
-
-    # 1) One example per (tech,energy) from Fuelmix
-    print("\n--- Fuelmix (one example per tech–energy) ---")
-    seen_fe = set()
-    for (g, e, t), con in model.Fuelmix.items():
-        if (g,e) in seen_fe:
-            continue
-        seen_fe.add((g,e))
-        print(f"{(g,e,t)} : {con.lower} : {con.body} : {con.upper}")
-    print(f"... printed {len(seen_fe)} of {len(model.f_in)} total Fuelmix constraints")
-
-    # 2) One example per (tech,energy) from Production
-    print("\n--- Production (one example per tech–energy) ---")
-    seen_po = set()
-    for (g, e, t), con in model.Production.items():
-        if (g,e) in seen_po:
-            continue
-        seen_po.add((g,e))
-        print(f"{(g,e,t)} : {con.lower} : {con.body} : {con.upper}")
-    print(f"... printed {len(seen_po)} of {len(model.f_out)} total Production constraints")
-
-    # --- Sample print for MaxBuy: one example per energy ---
-    print("\n--- MaxBuy (one example per energy) ---")
-    seen_e = set()
-    for (e, t), con in model.MaxBuy.items():
-        if e in seen_e:
-            continue
-        seen_e.add(e)
-        print(f"  ({e}, {t}) : {con.lower} : {con.body} : {con.upper}")
-        if len(seen_e) == len(model.F):
-            break
-    print(f"... printed {len(seen_e)} of {len(model.F)} energies")
-
-    # --- Likewise for MaxSale ---
-    print("\n--- MaxSale (one example per energy) ---")
-    seen_e = set()
-    for (e, t), con in model.MaxSale.items():
-        if e in seen_e:
-            continue
-        seen_e.add(e)
-        print(f"  ({e}, {t}) : {con.lower} : {con.body} : {con.upper}")
-        if len(seen_e) == len(model.F):
-            break
-    print(f"... printed {len(seen_e)} of {len(model.F)} energies")
-
-
-    # ─── Test: force all non‐storage to max output ────────────────────────
-    def force_max_gen(m, g, e, t):
-        # only for non‐storage export links
-        if (g,e) not in m.f_out or g in m.G_s:
+    # 8) Ramp-up: (Generation[t] – Generation[t-1])/Fe ≤ LHS
+    def ramp_up_rule(m, g, t):
+        # only where a nonzero RampRate exists
+        if m.RampRate[g] <= 0:
             return Constraint.Skip
-        # force Generation = capacity * export‐fraction
-        return m.Generation[g,e,t] == m.capacity[g] * m.out_frac[g,e]
-    model.ForceMaxGen = Constraint(model.f_out, model.T, rule=force_max_gen)
+        # skip the first hour (no t-1)
+        if t == m.T.first():
+            return Constraint.Skip
+        # build left‐hand side exactly as GAMS:
+        # if not UC: just rampRate
+        # if UC: rampRate*Online[t-1] + Minimum*(1-Online[t-1])
+        prev_on = m.Online[g, m.T.prev(t)]
+        if g not in m.UC:
+            lhs = m.RampRate[g]
+        else:
+            lhs = m.RampRate[g]*prev_on + m.Minimum[g]*(1-prev_on)
+        # right‐hand side: sum over export‐energies of (Gen[t]–Gen[t-1])/Fe
+        rhs = sum(
+            (m.Generation[g,e,t] - m.Generation[g,e,m.T.prev(t)])/m.Fe[g]
+            for (gg,e) in m.f_out
+            if gg == g
+        )
+        return lhs >= rhs
+    model.RampUp = Constraint(model.G, model.T, rule=ramp_up_rule)
 
-    # ─── Objective: Maximize total storage discharge ─────────────────────────
-    def max_discharge_obj(m):
-        return sum(
-            m.Generation[g, e, t] * m.out_frac[g, e]
-            for (g, e) in m.f_out
-            if g in m.G_s
+    # 9) Ramp-down: (Generation[t-1] – Generation[t])/Fe ≤ LHS
+    def ramp_down_rule(m, g, t):
+        if m.RampRate[g] <= 0:
+            return Constraint.Skip
+        if t == m.T.first():
+            return Constraint.Skip
+        # LHS: if not UC, rampRate; else rampRate*Online[t] + Minimum*(1-Online[t])
+        if g not in m.UC:
+            lhs = m.RampRate[g]
+        else:
+            lhs = m.RampRate[g]*m.Online[g,t] + m.Minimum[g]*(1-m.Online[g,t])
+        # RHS: sum over export‐energies of (Gen[t-1]–Gen[t])/Fe
+        rhs = sum(
+            (m.Generation[g,e,m.T.prev(t)] - m.Generation[g,e,t]) / m.Fe[g]
+            for (gg,e) in m.f_out
+            if gg == g
+        )
+        return lhs >= rhs
+    model.RampDown = Constraint(model.G, model.T, rule=ramp_down_rule)
+
+    # 10) Capacity constraint: Capacity*Online ≥ FuelUseTotal  (only for UC)
+    def capacity_rule(m, g, t):
+        if g not in m.UC:
+            return Constraint.Skip
+        return m.capacity[g] * m.Online[g,t] >= m.Fuelusetotal[g,t]
+    model.Capacity = Constraint(model.G, model.T, rule=capacity_rule)
+
+    # 11) Minimum-load: FuelUseTotal ≥ Minimum*Online  (only if Minimum>0)
+    def minimum_load_rule(m, g, t):
+        if g not in m.UC or m.Minimum[g] <= 0:
+            return Constraint.Skip
+        return m.Fuelusetotal[g,t] >= m.Minimum[g] * m.Online[g,t]
+    model.MinimumLoad = Constraint(model.G, model.T, rule=minimum_load_rule)
+
+    # 12) Startup cost: Startcost ≥ StartupCost*(Online[t]–Online[t-1])  (only if cstart>0)
+    def startup_cost_rule(m, g, t):
+        if g not in m.UC or m.cstart[g] <= 0:
+            return Constraint.Skip
+        # treat previous‐hour Offline before t=first as 0
+        prev_on = 0 if t == m.T.first() else m.Online[g, m.T.prev(t)]
+        return m.Startcost[g,t] >= m.cstart[g] * (m.Online[g,t] - prev_on)
+    model.StartupCost = Constraint(model.G, model.T, rule=startup_cost_rule)
+
+    # 13) Objective Function
+    # 1) Penalty for unmet demand or over-supply
+    penalty = 1e6   # for example
+
+    # 2) Cost‐definition constraint: mirror your GAMS “Cost =E= …”
+    def cost_definition_rule(m):
+        # a) Fuel cost (imports are a positive cost → negative in objective)
+        imp_cost = sum(
+            m.price_buy[a,e,t] * m.Buy[a,e,t]
+            for (a,e) in m.buyE
             for t in m.T
         )
-    model.MaxDischarge = Objective(rule=max_discharge_obj, sense=maximize)
-
-    # ─── Solve with Gurobi ───────────────────────────────────────────────────
-    solver = SolverFactory('gurobi')
-    results = solver.solve(model, tee=True)
-    model.solutions.load_from(results)   # ensure values are loaded
-
-    # ─── Report storage charge/discharge/SOC/FueluseTotal ─────────────────
-    print("\n=== Storage detailed report by hour ===")
-    for g in model.G_s:
-        # find the energy key for hydrogen in this tech's input‐mix
-        hydrogen_energy = next(
-            e for (gg, e) in model.f_in
-            if gg == g and 'Hydrogen' in e
+        # b) Sale revenue
+        sale_rev = sum(
+            m.price_sale[a,e,t] * m.Sale[a,e,t]
+            for (a,e) in m.saleE
+            for t in m.T
+        )
+        # c) Variable O&M on all tech→energy links
+        var_om = sum(
+            m.Generation[g,e,t] * m.cvar[g]
+            for (g,e) in m.TechToEnergy
+            for t in m.T
+        )
+        # d) Startup costs
+        startup = sum(
+            m.Startcost[g,t]
+            for g in m.G
+            for t in m.T
+        )
+        # e) Slack penalties (both import‐slack and export‐slack)
+        slack = (
+            sum(m.SlackDemandImport[a,e,t] for (a,e) in m.buyE  for t in m.T)
+          + sum(m.SlackDemandExport[a,e,t] for (a,e) in m.saleE for t in m.T)
         )
 
-        print(f"\n--- Storage tech: {g} ---")
-        print(f"{'Hour':>8} | {'FuelUseTotal':>12} | {'Charge(H2)':>12} | {'Discharge':>10} | {'SOC':>8}")
-        print("-"*62)
-        for t in model.T:
-            fuel_total    = model.Fuelusetotal[g, t].value or 0.0
-            # only the hydrogen share of the total goes into storage
-            charge_amt    = fuel_total * model.in_frac[g, hydrogen_energy]
-            # actual discharge energy
-            discharge_amt = sum(
-                model.Generation[g, e, t].value * model.out_frac[g, e]
-                for (gg, e) in model.f_out
-                if gg == g
-            ) or 0.0
-            soc           = model.Volume[g, t].value or 0.0
+        # GAMS: Cost =E= -imp_cost + sale_rev - var_om - startup - penalty*slack
+        return m.Cost == (
+           - imp_cost
+           + sale_rev
+           - var_om
+           - startup
+           - penalty * slack
+        )
+    model.CostDefinition = Constraint(rule=cost_definition_rule)
+    # 3) Objective: minimize the Cost variable
+    model.Obj = Objective(expr=model.Cost, sense=minimize)
 
-            print(f"{t:>8} | {fuel_total:12.3f} | {charge_amt:12.3f} | {discharge_amt:10.3f} | {soc:8.3f}")
+    return model
 
-
-
-    return
 
 if __name__ == "__main__":
-    main()
+    from pyomo.environ import SolverFactory, Constraint, value
+    from src.excel_writter import export_results_to_excel
+
+    m = main()   # make sure main() returns the model!
+
+    print("\n--- Sample constraint rows (one per “prefix”) ---\n")
+    for c in m.component_objects(Constraint, active=True):
+        comp = getattr(m, c.name)
+        print(f"Constraint: {c.name}")
+        if comp.is_indexed():
+            seen = set()
+            for idx in comp:
+                prefix = idx[:-1] if isinstance(idx, tuple) else idx
+                if prefix in seen:
+                    continue
+                seen.add(prefix)
+                row = comp[idx]
+                print(f"  {c.name}{idx} : {row.body}")
+        else:
+            # scalar constraint → just print its bounds, not the huge body
+            lb = comp.lower() if comp.has_lb() else None
+            ub = comp.upper() if comp.has_ub() else None
+            print(f"  {c.name} : ", end="")
+            if lb is not None:  print(f"LB={lb}  ", end="")
+            if ub is not None:  print(f"UB={ub}", end="")
+            print()
+        print()
+
+    # --- Now solve ---
+    solver = SolverFactory('gurobi')   # or 'glpk'
+    results = solver.solve(m, tee=True)
+    m.solutions.load_from(results)
+
+    print(f"\n>> Objective = {value(m.Obj):.3f}")
+
+    export_results_to_excel()

@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 import os
-import pandas as pd
-from pygments.lexer import default
 from pyomo.environ import (
     ConcreteModel, Set, Param, Var, Constraint, Binary,
-    NonNegativeReals, SolverFactory, Objective, minimize,
-    Reals
+    NonNegativeReals, Objective, minimize, Reals
 )
 from collections import defaultdict
 
@@ -127,8 +124,6 @@ def main():
             area_has[a] = True
 
     areas_with_lines = [a for a, has in area_has.items() if has]
-
-    print(tech_df)
 
      # 3) Build model
     model = ConcreteModel()
@@ -472,7 +467,7 @@ def main():
 
 
 if __name__ == "__main__":
-    from pyomo.environ import SolverFactory, Constraint, value
+    from pyomo.environ import SolverFactory, value
     from src.excel_writter import export_results_to_excel
 
     m = main()   # make sure main() returns the model!

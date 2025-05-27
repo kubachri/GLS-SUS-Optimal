@@ -30,19 +30,28 @@ def main():
     tech_df.loc[G_s, 'Capacity'] = tech_df.loc[G_s, 'StorageCap']
     capacity = data.get('capacity', data['capacity']).copy()
 
-    # ── 🛠  TEST MODE: limit the horizon ───────────────────────────
-    N_test = 168
-    def hour_index(h):
-        return int(h.split('-')[1])
-    T = sorted(T_all, key=hour_index)[:N_test]
-    print("Using only these hours:", T)
-    # ───────────────────────────────────────────────────────────────
+    test = False
+    if test:
+        # ── 🛠  TEST MODE: limit the horizon ───────────────────────────
+        N_test = 168
+        def hour_index(h):
+            return int(h.split('-')[1])
+        T = sorted(T_all, key=hour_index)[:N_test]
+        # ───────────────────────────────────────────────────────────────
 
-    profile = {(g, t): v for (g, t), v in data['Profile'].items() if t in T}
-    demand = {(a, e, t): v for (a, e, t), v in data['Demand'].items() if t in T}
-    price_buy = {(a, e, t): v for (a, e, t), v in data['price_buy'].items() if t in T}
-    price_sell = {(a, e, t): v for (a, e, t), v in data['price_sell'].items() if t in T}
-    Xcap = {(a, f, t): v for (a, f, t), v in data['Xcap'].items() if t in T}
+        profile = {(g, t): v for (g, t), v in data['Profile'].items() if t in T}
+        demand = {(a, e, t): v for (a, e, t), v in data['Demand'].items() if t in T}
+        price_buy = {(a, e, t): v for (a, e, t), v in data['price_buy'].items() if t in T}
+        price_sell = {(a, e, t): v for (a, e, t), v in data['price_sell'].items() if t in T}
+        Xcap = {(a, f, t): v for (a, f, t), v in data['Xcap'].items() if t in T}
+    else:
+        T = T_all
+        profile = data['Profile']
+        demand = data['Demand']
+        price_buy = data['price_buy']
+        price_sell = data['price_sell']
+        Xcap = data['Xcap']
+
 
     # ─── 2.1) UC / RR / scale capacity ─────────────────────────────────
     orig_cap   = tech_df['Capacity'].copy()
@@ -541,10 +550,8 @@ if __name__ == "__main__":
     # print(f"\n>> Objective = {value(m.Obj):.3f}")
 
     solver = SolverFactory('gurobi')
-    solver.options['MIPGap']    = 0.10
+    solver.options['MIPGap']    = 0.0015
     solver.solve(m, tee=True)
-
-
 
     # print("\n--- GAMS-style Sample equations (one per prefix) ---\n")
     #

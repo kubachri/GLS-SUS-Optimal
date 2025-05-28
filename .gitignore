@@ -1,0 +1,13 @@
+# 1. Don’t check in your virtual-env
+venv/
+__pycache__/
+
+# 2. IDE/project files
+.idea/
+
+# 3. Personal outputs, data, logs, etc.
+results.xlsx
+*.log
+
+# 4. Any scripts you’re keeping out of version control
+w_H2_demand_*.py

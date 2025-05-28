@@ -1,6 +1,6 @@
 import pandas as pd
 from pyomo.environ import SolverFactory, value
-from model_final import main        # or whatever module you built your model in
+from model import main        # or whatever module you built your model in
 from src.data_loader import load_data
 
 def export_results_to_excel(path="results.xlsx"):

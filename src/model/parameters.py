@@ -76,6 +76,3 @@ def define_params(model, data, tech_df):
     model.price_sale = Param(model.A, model.F, model.T, initialize=price_sell, within=Reals)
     model.InterconnectorCapacity = Param(model.LinesInterconnectors, model.F, model.T,
                                          initialize=Xcap, default= 0, within=NonNegativeReals)
-
-    model.in_frac.pprint()
-    model.out_frac.pprint()

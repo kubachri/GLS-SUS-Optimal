@@ -6,8 +6,21 @@ __pycache__/
 .idea/
 
 # 3. Personal outputs, data, logs, etc.
-results.xlsx
+results/results.xlsx
 *.log
 
 # 4. Any scripts you’re keeping out of version control
 w_H2_demand_*.py
+
+# IntelliJ / PyCharm project files
+.idea/
+
+# Linear‐program files
+*.lp
+
+# Excel result files
+*.xlsx
+results/
+
+# Single file you want ignored
+all_model.py

@@ -29,7 +29,7 @@ def main():
     solver.options['MIPGap'] = 0.0015
     solver.solve(model, tee=True)
 
-    export_results_to_excel(model)
+    # export_results_to_excel(model)
     export_results(model)
 
 if __name__ == '__main__':

@@ -24,6 +24,7 @@ def export_results(model, path: str = None):
     # 2) Common time index
     times = list(model.T)
     time_cols = [str(t) for t in times]
+    ntimes = len(times)
 
     # --- build ResultT blocks ---
     pairs = set(model.f_in) | set(model.f_out)
@@ -160,10 +161,48 @@ def export_results(model, path: str = None):
     df_A.sort_values(['Result','area','energy'], inplace=True)
     df_A = df_A[['Result','area','energy'] + time_cols]
 
-    # --- write everything in one workbook ---
+    # ----------------------------------------------------------------
+    # --- ResultC (capacity factors) ---------------------------------
+    # ----------------------------------------------------------------
+    C_rows = []
+    for tech in model.G:
+        cap = value(model.capacity[tech])
+        row = {'Result': 'CapacityFactor', 'tech': tech}
+        fuels = [e for (g,e) in model.f_out if g == tech]
+        for t in times:
+            gen_sum = sum(value(model.Generation[tech, e, t]) for e in fuels)
+            row[str(t)] = gen_sum / cap if cap != 0 else 0
+        C_rows.append(row)
+
+    df_C_hourly = pd.DataFrame(C_rows, columns=['Result','tech'] + time_cols)
+
+    summary_cf = []
+    summary_flh = []
+    for tech in model.G:
+        cap = value(model.capacity[tech])
+        fuels = [e for (g,e) in model.f_out if g == tech]
+        total_gen = sum(
+            value(model.Generation[tech, e, t])
+            for e in fuels for t in times
+        )
+        avg_cf = total_gen / (cap * ntimes) if cap != 0 else 0
+        summary_cf.append({'Result': 'CapacityFactor_Summary','tech': tech,'Average_CF': avg_cf})
+        summary_flh.append({'Result': 'FullLoadHours','tech': tech,'FLH': avg_cf * ntimes})
+
+    df_C_summary = pd.DataFrame(summary_cf + summary_flh, columns=['Result','tech','Average_CF','FLH'])
+
+    # ----------------------------------------------------------------
+    # --- Write all sheets -------------------------------------------
+    # ----------------------------------------------------------------
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_T.to_excel(writer, sheet_name='ResultT_all', index=False)
         df_F.to_excel(writer, sheet_name='Flows',      index=False)
         df_A.to_excel(writer, sheet_name='ResultA_all',index=False)
 
-    print(f"Wrote ResultT, Flows and ResultA to {output.resolve()}")
+        # ResultC: hourly CF
+        df_C_hourly.to_excel(writer, sheet_name='ResultC', index=False, startrow=0)
+        # blank row, then summary
+        df_C_summary.to_excel(writer, sheet_name='ResultC', index=False,
+                              startrow=len(df_C_hourly) + 2)
+
+    print(f"Wrote ResultT_all, Flows, ResultA_all and ResultC to {output.resolve()}")

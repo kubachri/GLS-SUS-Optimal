@@ -24,3 +24,8 @@ results/
 
 # Single file you want ignored
 all_model.py
+
+#data
+inc_data
+inc_data_CK
+inc_data_full

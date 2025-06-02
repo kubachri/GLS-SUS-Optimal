@@ -90,12 +90,9 @@ def define_params(model, data, tech_df):
         model.weekOfT = Param(model.T, initialize=_week_of_t_init, within=PositiveIntegers)
 
         # 2) Define methanol_demand_week[w] = 32000/52  for each week w in W
-        target = 7500
-        new_target = target / 8760 * len(model.T)
-        print(new_target)
+        annual_methanol_demand = 7500.0
+        new_target = annual_methanol_demand / 8760.0 * len(model.T)
         weekly_target = float(new_target / len(model.W))
         demand_dict = { w: weekly_target for w in model.W }
 
         model.methanol_demand_week = Param(model.W, initialize=demand_dict, within=NonNegativeReals)
-
-        model.methanol_demand_week.pprint()

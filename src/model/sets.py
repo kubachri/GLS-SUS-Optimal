@@ -96,5 +96,3 @@ def define_sets(model, data, tech_df):
 
         # 3) Expose that as a Pyomo Set W:
         model.W = Set(initialize=week_list, ordered=True)
-
-        model.W.pprint()

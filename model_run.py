@@ -1,6 +1,6 @@
 # scripts/run_model.py
 import argparse
-from pyomo.environ import SolverFactory
+from pyomo.environ import SolverFactory, Suffix
 from src.config           import ModelConfig
 from src.model.builder    import build_model
 from src.data.loader import load_data
@@ -28,6 +28,14 @@ def main():
     solver = SolverFactory('gurobi')
     solver.options['MIPGap'] = 0.0015
     solver.solve(model, tee=True)
+
+    model.dual = Suffix(direction=Suffix.IMPORT)
+
+    print("\nWeekly methanol shadow prices (€/t or utility units per tonne):")
+    for w in model.W:
+        constr = model.WeeklyMethanolTarget[w]
+        dual = model.dual.get(constr)
+        print(f"Week {w:>2}:  {dual:8.2f} €/t" if dual is not None else f"Week {w:>2}:  (inactive or 0)")
 
     # export_results_to_excel(model)
     export_results(model)

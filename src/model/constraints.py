@@ -242,6 +242,29 @@ def startup_cost_rule(m, g, t):
     prev_on = 0 if t == m.T.first() else m.Online[g, m.T.prev(t)]
     return m.Startcost[g,t] >= m.cstart[g] * (m.Online[g,t] - prev_on)
 
+# 13) Methanol demand
+def weekly_methanol_demand_rule(m, w):
+    """
+    For each w ∈ W:  sum_{t: weekOfT[t]==w} Sale[a,'METHANOL',t]  =  methanol_demand_week[w].
+    If no (area,'METHANOL') exists in saleE, skip.
+    """
+    # 1) Find every (area,energy) pair where energy == 'METHANOL'
+    methanol_pairs = [ (a,e) for (a,e) in m.saleE if e == 'Methanol' ]
+
+    # 2) If there is no such pair, skip this constraint row
+    if len(methanol_pairs) == 0:
+        return Constraint.Skip
+
+    # 3) Sum up Sale[a,'METHANOL',t] over all t in week w
+    expr = sum(
+        m.Sale[a, e, t]
+        for (a,e) in methanol_pairs
+        for t in m.T
+        if m.weekOfT[t] == w
+    )
+    # 4) Force that sum == the constant weekly demand
+    return expr == m.methanol_demand_week[w]
+
 def add_constraints(model):
     model.Fuelmix = Constraint(model.f_in, model.T, rule=fuelmix_rule)
     model.Production = Constraint(model.f_out, model.T, rule=production_rule)
@@ -262,3 +285,5 @@ def add_constraints(model):
     model.Capacity = Constraint(model.G, model.T, rule=capacity_rule)
     model.MinimumLoad = Constraint(model.G, model.T, rule=minimum_load_rule)
     model.StartupCost = Constraint(model.G, model.T, rule=startup_cost_rule)
+    if model.Demand_Target:
+        model.WeeklyMethanolTarget = Constraint(model.W, rule=weekly_methanol_demand_rule)

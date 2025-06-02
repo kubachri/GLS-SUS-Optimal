@@ -6,12 +6,21 @@ from pathlib import Path
 
 def export_results(model, path: str = None):
     """
-    Export GAMS‐style ResultT, ResultF and ResultA tables to Excel.
+    Export GAMS‐style ResultT, ResultF and ResultA tables to Excel,
+    plus “ResultTsum”, “ResultFsum” and “ResultAsum” pivoted summaries.
 
     Sheets produced:
-      - ResultT_all   (Operation, Volume, Costs_EUR, Startcost_EUR, Variable_OM_cost_EUR)
-      - Flows         (areaFrom, areaTo, energy)
-      - ResultA_all   (Buy, Sale, Demand, Import_price_EUR, Export_price_EUR, Buy_EUR, Sale_EUR)
+      - ResultT_all    (hourly: Operation, Volume, Costs_EUR, Startcost_EUR, Variable_OM_cost_EUR)
+      - ResultTsum     (pivot: one row per (Result, tech), columns = each energy, values = sum over hours;
+                        “Result” in the same block‐order as the hourly sheet)
+      - Flows          (hourly: areaFrom, areaTo, energy)
+      - ResultFsum     (pivot: one row per (areaFrom, areaTo), columns = each energy, values = sum over hours)
+      - ResultA_all    (hourly: Buy, Sale, Demand, Import_price_EUR, Export_price_EUR, Buy_EUR, Sale_EUR)
+      - ResultAsum     (pivot: one row per (Result, area), columns = each energy,
+                        values = sum over hours except for price rows:
+                        – for energy=="Electricity", take the average over all hours
+                        – for all other energies, take the first‐hour price)
+      - ResultC        (hourly capacity factors + summary below)
     """
     # 1) Determine output path
     if path is None:
@@ -81,15 +90,15 @@ def export_results(model, path: str = None):
         varom.append(row)
     df_varom = pd.DataFrame(varom)
 
-    # sort each block by tech→energy
+    # sort each block by tech → energy
     for df in (df_op, df_vol, df_cost, df_start, df_varom):
         df.sort_values(['tech','energy'], inplace=True)
 
-    # concatenate all ResultT
+    # concatenate all ResultT (hourly)
     df_T = pd.concat([df_op, df_vol, df_cost, df_start, df_varom], ignore_index=True)
     df_T = df_T[['Result','tech','energy'] + time_cols]
 
-    # --- build Flows sheet ---
+    # --- build Flows sheet (hourly) ---
     flows = []
     for ao, ai, f in model.flowset:
         row = {'areaFrom': ao, 'areaTo': ai, 'energy': f}
@@ -100,7 +109,34 @@ def export_results(model, path: str = None):
     df_F.sort_values(['areaFrom','areaTo','energy'], inplace=True)
     df_F = df_F[['areaFrom','areaTo','energy'] + time_cols]
 
-    # --- build ResultA sheet ---
+    # ------------------------------------------------
+    # --- RESULTTsum: pivot AND enforce block order ---
+    # ------------------------------------------------
+    df_Tsum = (
+        df_T
+          .set_index(['Result','tech','energy'])[time_cols]
+          .sum(axis=1)             # sum each (Result,tech,energy) over all t
+          .unstack(fill_value=0)   # pivot so “energy” becomes columns
+          .reset_index()           # bring “Result” & “tech” back as columns
+    )
+
+    # Enforce the exact block‐order for “Result” in df_Tsum
+    block_order_T = [
+        'Operation',
+        'Volume',
+        'Costs_EUR',
+        'Startcost_EUR',
+        'Variable_OM_cost_EUR'
+    ]
+    df_Tsum['Result'] = pd.Categorical(
+        df_Tsum['Result'],
+        categories=block_order_T,
+        ordered=True
+    )
+    df_Tsum.sort_values(['Result','tech'], inplace=True)
+
+
+    # --- build ResultA sheet (hourly) ---
     A_rows = []
 
     # 1) Buy & 2) Sale quantities
@@ -108,12 +144,14 @@ def export_results(model, path: str = None):
         for a, e in varset:
             row = {'Result': res, 'area': a, 'energy': e}
             for t in times:
-                row[str(t)] = value(model.Buy[a, e, t]) if res == 'Buy' else value(model.Sale[a, e, t])
+                row[str(t)] = (
+                    value(model.Buy[a, e, t]) if res == 'Buy'
+                    else value(model.Sale[a, e, t])
+                )
             A_rows.append(row)
 
     # 3) Demand – only truly initialized & non‐zero
-    raw_demand = dict(model.demand.items())  # only contains explicitly set entries
-    # pick out (area,energy) combos that have at least one non‐zero hour
+    raw_demand = dict(model.demand.items())
     dem_pairs = sorted({
         (a, e)
         for (a, e, t), val in raw_demand.items()
@@ -144,22 +182,85 @@ def export_results(model, path: str = None):
         for a, e in varset:
             row = {'Result': res, 'area': a, 'energy': e}
             for t in times:
-                qty   = value(model.Buy[a, e, t])  if res == 'Buy_EUR'  else value(model.Sale[a, e, t])
+                qty   = (
+                    value(model.Buy[a, e, t])
+                    if res == 'Buy_EUR'
+                    else value(model.Sale[a, e, t])
+                )
                 price = price_param[a, e, t]
                 row[str(t)] = qty * price
             A_rows.append(row)
 
     df_A = pd.DataFrame(A_rows)
 
-    # enforce your exact Result‐block order
-    block_order = [
-        'Buy', 'Sale', 'Demand',
-        'Import_price_EUR', 'Export_price_EUR',
-        'Buy_EUR', 'Sale_EUR'
+    # enforce the exact block‐order for df_A
+    block_order_A = [
+        'Buy',
+        'Sale',
+        'Demand',
+        'Import_price_EUR',
+        'Export_price_EUR',
+        'Buy_EUR',
+        'Sale_EUR'
     ]
-    df_A['Result'] = pd.Categorical(df_A['Result'], categories=block_order, ordered=True)
+    df_A['Result'] = pd.Categorical(
+        df_A['Result'],
+        categories=block_order_A,
+        ordered=True
+    )
     df_A.sort_values(['Result','area','energy'], inplace=True)
     df_A = df_A[['Result','area','energy'] + time_cols]
+
+
+    # ------------------------------------------------------------
+    # --- RESULTAsum: pivot but adjust “Electricity” price rows ---
+    # ------------------------------------------------------------
+    price_mask = df_A['Result'].isin(['Import_price_EUR','Export_price_EUR'])
+
+    # (a) Build a small DataFrame that holds exactly one price‐value per
+    #     (Result, area, energy):
+    price_rows = df_A[price_mask].copy()
+
+    # Compute “PriceValue” as:
+    #  - If energy == "Electricity", average over all hours
+    #  - Else, take the first hour’s price (time_cols[0])
+    price_rows['PriceValue'] = price_rows.apply(
+        lambda row: row[time_cols].mean()
+                    if row['energy'] == 'Electricity'
+                    else row[time_cols[0]],
+        axis=1
+    )
+
+    # Pivot this “PriceValue” table so that each “energy” becomes its own column:
+    df_price = (
+        price_rows
+          .set_index(['Result','area','energy'])['PriceValue']
+          .unstack(level='energy', fill_value=0)
+          .reset_index()
+    )
+    # Now df_price has columns:
+    #    [ 'Result', 'area', '<energy1>', '<energy2>', … ]
+    # where for (Import_price_EUR, "DK1", "Electricity"), the cell is
+    # the *average* of all hourly Import_price_EUR["DK1","Electricity",t].
+
+    # (b) Build the non‐price sums exactly as before:
+    df_nonprice = (
+        df_A[~price_mask]
+          .set_index(['Result','area','energy'])[time_cols]
+          .sum(axis=1)             # sum each (Result,area,energy) over all t
+          .unstack(fill_value=0)   # pivot so “energy” becomes columns
+          .reset_index()           # bring “Result” & “area” back as columns
+    )
+
+    # (c) Combine them and re‐apply block order
+    df_Asum = pd.concat([df_nonprice, df_price], ignore_index=True)
+    df_Asum['Result'] = pd.Categorical(
+        df_Asum['Result'],
+        categories=block_order_A,
+        ordered=True
+    )
+    df_Asum.sort_values(['Result','area'], inplace=True)
+
 
     # ----------------------------------------------------------------
     # --- ResultC (capacity factors) ---------------------------------
@@ -191,18 +292,47 @@ def export_results(model, path: str = None):
 
     df_C_summary = pd.DataFrame(summary_cf + summary_flh, columns=['Result','tech','Average_CF','FLH'])
 
+
     # ----------------------------------------------------------------
-    # --- Write all sheets -------------------------------------------
+    # --- Write all sheets (including updated “sum” sheets) ---------
     # ----------------------------------------------------------------
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # 1) ResultT – hourly
         df_T.to_excel(writer, sheet_name='ResultT_all', index=False)
-        df_F.to_excel(writer, sheet_name='Flows',      index=False)
-        df_A.to_excel(writer, sheet_name='ResultA_all',index=False)
 
-        # ResultC: hourly CF
+        # 2) ResultTsum – pivoted & ordered
+        df_Tsum.to_excel(writer, sheet_name='ResultTsum', index=False)
+
+        # 3) Flows – hourly
+        df_F.to_excel(writer, sheet_name='Flows', index=False)
+
+        # 4) ResultFsum – pivoted
+        df_Fsum = (
+            df_F
+              .set_index(['areaFrom','areaTo','energy'])[time_cols]
+              .sum(axis=1)             # sum each (areaFrom, areaTo, energy) over all t
+              .unstack(fill_value=0)   # pivot so “energy” becomes columns
+              .reset_index()           # bring “areaFrom” & “areaTo” back as columns
+        )
+        df_Fsum.to_excel(writer, sheet_name='ResultFsum', index=False)
+
+        # 5) ResultA – hourly
+        df_A.to_excel(writer, sheet_name='ResultA_all', index=False)
+
+        # 6) ResultAsum – pivoted, with “Electricity” prices averaged
+        df_Asum.to_excel(writer, sheet_name='ResultAsum', index=False)
+
+        # 7) ResultC – hourly capacity factors
         df_C_hourly.to_excel(writer, sheet_name='ResultC', index=False, startrow=0)
-        # blank row, then summary
-        df_C_summary.to_excel(writer, sheet_name='ResultC', index=False,
-                              startrow=len(df_C_hourly) + 2)
+        #    blank row, then summary (CF_Summary & FLH)
+        df_C_summary.to_excel(
+            writer,
+            sheet_name='ResultC',
+            index=False,
+            startrow=len(df_C_hourly) + 2
+        )
 
-    print(f"Wrote ResultT_all, Flows, ResultA_all and ResultC to {output.resolve()}")
+    print(
+        f"Wrote ResultT_all, ResultTsum, Flows, ResultFsum, "
+        f"ResultA_all, ResultAsum and ResultC to {output.resolve()}"
+    )

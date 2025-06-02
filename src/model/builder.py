@@ -38,6 +38,10 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
 
     # 4) Assemble the model
     model = ConcreteModel()
+
+    #DemandTarget
+    model.Demand_Target = True
+
     define_sets(model, data, tech_df)
     define_params(model, data, tech_df)
     define_variables(model)

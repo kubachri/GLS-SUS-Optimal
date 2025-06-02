@@ -1,6 +1,6 @@
 # src/model/params.py
 
-from pyomo.environ import Param, NonNegativeReals, Reals
+from pyomo.environ import Param, NonNegativeReals, Reals, PositiveIntegers
 
 def define_params(model, data, tech_df):
     """
@@ -76,3 +76,26 @@ def define_params(model, data, tech_df):
     model.price_sale = Param(model.A, model.F, model.T, initialize=price_sell, within=Reals)
     model.InterconnectorCapacity = Param(model.LinesInterconnectors, model.F, model.T,
                                          initialize=Xcap, default= 0, within=NonNegativeReals)
+
+    if model.Demand_Target:
+        # 1) Define weekOfT[t] = integer in {1, 2, …, n_weeks}
+        #    where each week covers 168 time‐steps in T.
+        def _week_of_t_init(m, t):
+            # build an ordered Python list of all time‐indices
+            all_t = list(m.T)            # e.g. [t1, t2, …, tN]
+            idx = all_t.index(t)         # gives 0, 1, 2, …, N-1
+            return (idx // 168) + 1      # integer division → 1..n_weeks
+
+        # Attach the Param to the model
+        model.weekOfT = Param(model.T, initialize=_week_of_t_init, within=PositiveIntegers)
+
+        # 2) Define methanol_demand_week[w] = 32000/52  for each week w in W
+        target = 7500
+        new_target = target / 8760 * len(model.T)
+        print(new_target)
+        weekly_target = float(new_target / len(model.W))
+        demand_dict = { w: weekly_target for w in model.W }
+
+        model.methanol_demand_week = Param(model.W, initialize=demand_dict, within=NonNegativeReals)
+
+        model.methanol_demand_week.pprint()

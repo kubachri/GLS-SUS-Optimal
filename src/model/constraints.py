@@ -250,7 +250,6 @@ def weekly_methanol_demand_rule(m, w):
     """
     # 1) Find every (area,energy) pair where energy == 'METHANOL'
     methanol_pairs = [ (a,e) for (a,e) in m.saleE if e == 'Methanol' ]
-
     # 2) If there is no such pair, skip this constraint row
     if len(methanol_pairs) == 0:
         return Constraint.Skip

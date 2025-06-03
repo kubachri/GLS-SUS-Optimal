@@ -1,6 +1,6 @@
 # scripts/run_model.py
 import argparse
-from pyomo.environ import SolverFactory, Suffix
+from pyomo.environ import SolverFactory, Suffix, value, Var, Binary
 from src.config           import ModelConfig
 from src.model.builder    import build_model
 from src.data.loader import load_data
@@ -25,17 +25,51 @@ def main():
 
     model = build_model(cfg)
 
-    model.dual = Suffix(direction=Suffix.IMPORT)
+    if model.Demand_Target:
+        # 2) Tell Pyomo we want to import duals (for later LP)
+        model.dual = Suffix(direction=Suffix.IMPORT)
 
+    # 3) Solve the MIP
     solver = SolverFactory('gurobi')
     solver.options['MIPGap'] = 0.0015
-    solver.solve(model, tee=True)
+    print("Solving MIP …")
+    mip_result = solver.solve(model, tee=True)
+    print("MIP solve finished.\n")
 
-    print("\nWeekly methanol shadow prices (€/t or utility units per tonne):")
-    for w in model.W:
-        constr = model.WeeklyMethanolTarget[w]
-        dual = model.dual.get(constr)
-        print(f"Week {w:>2}:  {dual:8.2f} €/t" if dual is not None else f"Week {w:>2}:  (inactive or 0)")
+    if model.Demand_Target:
+
+        # After solving the MIP, but before fixing binaries:
+        seen = set()
+        for varobj in model.component_data_objects(Var, descend_into=True):
+            if varobj.domain is Binary and varobj.value is not None:
+                comp_name = varobj.parent_component().name  # e.g. "Charge" or "Online"
+                tech = varobj.index()[0]  # first index = technology name
+                seen.add((comp_name, tech))
+
+        # Now print one line per (component, tech)
+        for comp_name, tech in sorted(seen):
+            print(f"{comp_name}  →  {tech}")
+
+        # Finally, fix all binaries as before
+        for varobj in model.component_data_objects(Var, descend_into=True):
+            if varobj.domain is Binary and varobj.value is not None:
+                varobj.fix(varobj.value)
+
+        # 5) Clear any old duals, then re‐solve as an LP to get duals
+        model.dual.clear()
+        print("Re‐solving as an LP to extract duals …")
+        lp_result = solver.solve(model, tee=False)
+        print("LP solve finished.\n")
+
+        # 6) Print the “shadow prices” on WeeklyMethanolTarget
+        print("Weekly methanol shadow prices (€/t):")
+        for w in model.W:
+            constr = model.WeeklyMethanolTarget[w]
+            dual_val = model.dual.get(constr)
+            if dual_val is None:
+                print(f"  Week {w:>2}:   (inactive or 0)")
+            else:
+                print(f"  Week {w:>2}:   {dual_val:8.2f} €/t")
 
     # export_results_to_excel(model)
     export_results(model)

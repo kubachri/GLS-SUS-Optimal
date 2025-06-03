@@ -25,11 +25,11 @@ def main():
 
     model = build_model(cfg)
 
+    model.dual = Suffix(direction=Suffix.IMPORT)
+
     solver = SolverFactory('gurobi')
     solver.options['MIPGap'] = 0.0015
     solver.solve(model, tee=True)
-
-    model.dual = Suffix(direction=Suffix.IMPORT)
 
     print("\nWeekly methanol shadow prices (€/t or utility units per tonne):")
     for w in model.W:

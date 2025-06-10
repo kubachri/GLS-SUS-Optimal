@@ -250,6 +250,11 @@ def weekly_methanol_demand_rule(m, w):
     """
     # 1) Find every (area,energy) pair where energy == 'METHANOL'
     methanol_pairs = [ (a,e) for (a,e) in m.saleE if e == 'Methanol' ]
+    print(methanol_pairs)
+    ##########################################################################
+    THE CONSTRAINT IS WRONG !!!! I WANT THE SUM OF GENERATION, NOT THE SALE!!
+    ##########################################################################
+    
     # 2) If there is no such pair, skip this constraint row
     if len(methanol_pairs) == 0:
         return Constraint.Skip
@@ -286,3 +291,4 @@ def add_constraints(model):
     model.StartupCost = Constraint(model.G, model.T, rule=startup_cost_rule)
     if model.Demand_Target:
         model.WeeklyMethanolTarget = Constraint(model.W, rule=weekly_methanol_demand_rule)
+        model.WeeklyMethanolTarget.pprint()

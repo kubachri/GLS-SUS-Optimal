@@ -261,6 +261,30 @@ def export_results(model, path: str = None):
     )
     df_Asum.sort_values(['Result','area'], inplace=True)
 
+    if model.Demand_Target:
+        # --- Duals sheet: 1) hourly CO2, 2) weekly methanol duals ---
+        # 1) Hourly CO2 duals
+        co2_rows = []
+        for t in times:
+            row = {'Time': str(t)}
+            for area in ['Skive']:
+                idx = (area, 'CO2', t)
+                if idx in model.Balance.index_set():
+                    dual_val = model.dual.get(model.Balance[idx], 0.0)
+                else:
+                    dual_val = 0.0
+                row[f"CO2_{area}"] = dual_val
+            co2_rows.append(row)
+        df_co2 = pd.DataFrame(co2_rows)
+
+        # 2) Weekly methanol‐target duals
+        meth_rows = []
+        for w in sorted(model.W):
+            # constraint index is just w
+            dual_val = model.dual.get(model.WeeklyMethanolTarget[w], 0.0)
+            meth_rows.append({'Week': w, 'MethanolDual': dual_val})
+        df_meth = pd.DataFrame(meth_rows)
+
 
     # ----------------------------------------------------------------
     # --- ResultC (capacity factors) ---------------------------------
@@ -331,6 +355,13 @@ def export_results(model, path: str = None):
             index=False,
             startrow=len(df_C_hourly) + 2
         )
+
+        # 8) Duals – hourly and weekly dual values
+        if model.Demand_Target:
+            # write hourly CO2 at the top
+            df_co2.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=0)
+            # then leave one blank line and write the weekly table
+            df_meth.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=3)
 
     print(
         f"Wrote ResultT_all, ResultTsum, Flows, ResultFsum, "

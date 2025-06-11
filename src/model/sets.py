@@ -25,6 +25,11 @@ def define_sets(model, data, tech_df):
     # Core entity sets
     G_p = [g for g in data['G'] if g not in data['G_s']]
 
+    # Demand
+    raw_demand = data['Demand']
+    print('raw demand:')
+    print(raw_demand)
+
     # Technology-to-energy export mapping
     pairs_TE = [
         (g, f)
@@ -39,6 +44,9 @@ def define_sets(model, data, tech_df):
     # Market interfaces (areas × fuels with positive prices)
     buy_pairs  = sorted({(a, e) for (a, e, t), p in data['price_buy'].items()  if p > 0})
     sale_pairs = sorted({(a, e) for (a, e, t), p in data['price_sell'].items() if p > 0})
+
+    print(buy_pairs)
+    print(sale_pairs)
 
     # Areas that have interconnector capacity
     area_has = defaultdict(bool)
@@ -83,6 +91,7 @@ def define_sets(model, data, tech_df):
     model.buyE  = Set(initialize=buy_pairs,  dimen=2, within=model.A * model.F)
     model.saleE = Set(initialize=sale_pairs, dimen=2, within=model.A * model.F)
     model.LinesInterconnectors = Set(initialize=lines, within=model.A)
+    model.DemandSet = Set(initialize=raw_demand.keys(), dimen=3, within=model.A * model.F * model.T)
 
     if model.Demand_Target:
         # Demand Target

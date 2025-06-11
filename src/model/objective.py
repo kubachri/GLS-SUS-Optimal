@@ -31,9 +31,15 @@ def define_objective(m, penalty=1e6):
             for t in m.T
         )
         # e) Slack penalties (both import‐slack and export‐slack)
-        slack = (
-            sum(m.SlackDemandImport[a,e,t] for (a,e) in m.buyE  for t in m.T)
-          + sum(m.SlackDemandExport[a,e,t] for (a,e) in m.saleE for t in m.T)
+        slack_imp_sum = sum(
+            m.SlackDemandImport[a, e, t]
+            for (a, e, t) in m.DemandSet
+            if (a, e) in m.buyE
+        )
+        slack_exp_sum = sum(
+            m.SlackDemandExport[a, e, t]
+            for (a, e, t) in m.DemandSet
+            if (a, e) in m.saleE
         )
 
         # GAMS: Cost =E= -imp_cost + sale_rev - var_om - startup - penalty*slack
@@ -42,7 +48,7 @@ def define_objective(m, penalty=1e6):
            + sale_rev
            - var_om
            - startup
-           - penalty * slack
+           - penalty * (slack_imp_sum + slack_exp_sum)
         )
 
     #Impose constraint (profit definition)

@@ -71,7 +71,7 @@ def define_params(model, data, tech_df):
     model.Minimum = Param(model.G, initialize=Minimum, within=NonNegativeReals)
     model.in_frac  = Param(model.G, model.F, initialize=in_frac, within=NonNegativeReals)
     model.out_frac = Param(model.G, model.F, initialize=out_frac, within=NonNegativeReals)
-    model.demand = Param(model.A, model.F, model.T, initialize=demand, within=NonNegativeReals)
+    model.demand = Param(model.DemandSet, initialize=demand, within=NonNegativeReals)
     model.price_buy = Param(model.A, model.F, model.T, initialize=price_buy, within=Reals)
     model.price_sale = Param(model.A, model.F, model.T, initialize=price_sell, within=Reals)
     model.InterconnectorCapacity = Param(model.LinesInterconnectors, model.F, model.T,
@@ -90,11 +90,9 @@ def define_params(model, data, tech_df):
         model.weekOfT = Param(model.T, initialize=_week_of_t_init, within=PositiveIntegers)
 
         # 2) Define methanol_demand_week[w] = 32000/52  for each week w in W
-        annual_methanol_demand = 6000.0
+        annual_methanol_demand = 1000.0
         new_target = annual_methanol_demand / 8760.0 * len(model.T)
         weekly_target = float(new_target / len(model.W))
-        print(weekly_target)
-        demand_dict = { w: weekly_target for w in model.W }
+        demand_dict = { w: weekly_target for w in model.W}
         print(demand_dict)
-
         model.methanol_demand_week = Param(model.W, initialize=demand_dict, within=NonNegativeReals)

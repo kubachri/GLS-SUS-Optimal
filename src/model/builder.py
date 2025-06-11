@@ -40,7 +40,7 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
     model = ConcreteModel()
 
     #DemandTarget
-    model.Demand_Target = True
+    model.Demand_Target = False
 
     define_sets(model, data, tech_df)
     define_params(model, data, tech_df)

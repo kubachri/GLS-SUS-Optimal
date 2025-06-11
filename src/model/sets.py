@@ -27,8 +27,6 @@ def define_sets(model, data, tech_df):
 
     # Demand
     raw_demand = data['Demand']
-    print('raw demand:')
-    print(raw_demand)
 
     # Technology-to-energy export mapping
     pairs_TE = [
@@ -44,9 +42,6 @@ def define_sets(model, data, tech_df):
     # Market interfaces (areas × fuels with positive prices)
     buy_pairs  = sorted({(a, e) for (a, e, t), p in data['price_buy'].items()  if p > 0})
     sale_pairs = sorted({(a, e) for (a, e, t), p in data['price_sell'].items() if p > 0})
-
-    print(buy_pairs)
-    print(sale_pairs)
 
     # Areas that have interconnector capacity
     area_has = defaultdict(bool)

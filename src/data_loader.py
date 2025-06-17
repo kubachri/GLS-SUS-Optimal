@@ -7,7 +7,7 @@ import numpy as np
 
 # directory containing all the .inc files
 INC_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', 'inc_data_CK')
+    os.path.join(os.path.dirname(__file__), '..', 'inc_data_GLS')
 )
 
 def read_set(name):

@@ -316,6 +316,63 @@ def export_results(model, path: str = None):
 
     df_C_summary = pd.DataFrame(summary_cf + summary_flh, columns=['Result','tech','Average_CF','FLH'])
 
+    # 9) Objective decomposition (total over all time‐steps, by element)
+    decomp = []
+
+    #  a) Fuel imports (“Buy_…”) are costs → negative contributions
+    for (a, e) in model.buyE:
+        tot = sum(
+            value(model.price_buy[a, e, t] * model.Buy[a, e, t])
+            for t in times
+        )
+        decomp.append({
+            "Element": f"Buy_{e}",
+            "Contribution": -tot
+        })
+
+    #  b) Fuel sales (“Sell_…”) are revenues → positive
+    for (a, e) in model.saleE:
+        tot = sum(
+            value(model.price_sale[a, e, t] * model.Sale[a, e, t])
+            for t in times
+        )
+        decomp.append({
+            "Element": f"Sell_{e}",
+            "Contribution": tot
+        })
+
+    #  c) Variable O&M on tech→energy
+    tot_varom = sum(
+        value(model.Generation[g, e, t] * model.cvar[g])
+        for (g, e) in model.TechToEnergy
+        for t in times
+    )
+    decomp.append({"Element": "Variable_OM", "Contribution": -tot_varom})
+
+    #  d) Startup costs
+    tot_start = sum(
+        value(model.Startcost[g, t])
+        for g in model.G
+        for t in times
+    )
+    decomp.append({"Element": "Startup", "Contribution": -tot_start})
+
+    #  e) Slack penalties
+    tot_slack_imp = sum(
+        value(model.SlackDemandImport[a, e, t])
+        for (a, e, t) in model.DemandSet
+    )
+    tot_slack_exp = sum(
+        value(model.SlackDemandExport[a, e, t])
+        for (a, e, t) in model.DemandSet
+    )
+    penalty = 1e6  # make sure this matches your objective() penalty
+    decomp.append({
+        "Element": "Slack",
+        "Contribution": -penalty * (tot_slack_imp + tot_slack_exp)
+    })
+
+    df_decomp = pd.DataFrame(decomp)
 
     # ----------------------------------------------------------------
     # --- Write all sheets (including updated “sum” sheets) ---------
@@ -362,6 +419,9 @@ def export_results(model, path: str = None):
             df_co2.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=0)
             # then leave one blank line and write the weekly table
             df_meth.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=3)
+
+        #Objective function decomposition
+        df_decomp.to_excel(writer, sheet_name="ObjDecomp", index=False)
 
     print(
         f"Wrote ResultT_all, ResultTsum, Flows, ResultFsum, "

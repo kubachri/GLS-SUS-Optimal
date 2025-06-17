@@ -4,7 +4,6 @@ from pyomo.environ import SolverFactory, Suffix, value, Var, Binary
 from src.config           import ModelConfig
 from src.model.builder    import build_model
 from src.data.loader import load_data
-from src.utils.excel_writer import export_results_to_excel
 from src.utils.export_resultT import export_results
 
 def parse_args():

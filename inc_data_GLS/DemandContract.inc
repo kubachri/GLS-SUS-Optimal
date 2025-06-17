@@ -3,14 +3,14 @@ Table DemandContract_T(timeD,area,energy)
 *Demand Target for fuels in areas and timeD are the delivery times                  
                                                                                     
                                                                                     
-*                                                                       6000        
+*                                                                       7000        
                                                                                     
                                                                                     
 *                                                                       tons        
 *                                                                       DK1         
 *                                                                       Methanol    
                                                                         DK1.Methanol
-Target1                                                                 6000        
+Target1                                                                 7000        
                                                                                     
                                                                                     
                                                                                     

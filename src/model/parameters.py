@@ -77,6 +77,11 @@ def define_params(model, data, tech_df):
     model.InterconnectorCapacity = Param(model.LinesInterconnectors, model.F, model.T,
                                          initialize=Xcap, default= 0, within=NonNegativeReals)
 
+    # Then, overwrite only electricity values
+    for a in model.LinesInterconnectors:
+        for t in model.T:
+            Xcap[(a, 'Electricity', t)] = 10
+
     if model.Demand_Target:
         # 1) Define weekOfT[t] = integer in {1, 2, …, n_weeks}
         #    where each week covers 168 time‐steps in T.
@@ -94,5 +99,4 @@ def define_params(model, data, tech_df):
         new_target = annual_methanol_demand / 8760.0 * len(model.T)
         weekly_target = float(new_target / len(model.W))
         demand_dict = { w: weekly_target for w in model.W}
-        print(demand_dict)
         model.methanol_demand_week = Param(model.W, initialize=demand_dict, within=NonNegativeReals)

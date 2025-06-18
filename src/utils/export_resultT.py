@@ -3,8 +3,9 @@
 import pandas as pd
 from pyomo.environ import value
 from pathlib import Path
+from src.config import ModelConfig
 
-def export_results(model, path: str = None):
+def export_results(model, cfg: ModelConfig, path: str = None):
     """
     Export GAMS‐style ResultT, ResultF and ResultA tables to Excel,
     plus “ResultTsum”, “ResultFsum” and “ResultAsum” pivoted summaries.
@@ -357,16 +358,25 @@ def export_results(model, path: str = None):
     )
     decomp.append({"Element": "Startup", "Contribution": -tot_start})
 
-    #  e) Slack penalties
-    tot_slack_imp = sum(
-        value(model.SlackDemandImport[a, e, t])
-        for (a, e, t) in model.DemandSet
-    )
-    tot_slack_exp = sum(
-        value(model.SlackDemandExport[a, e, t])
-        for (a, e, t) in model.DemandSet
-    )
-    penalty = 1e6  # make sure this matches your objective() penalty
+    # e) Slack penalties (skip any un‐initialized vars)
+    tot_slack_imp = 0.0
+    for (a, e, t) in model.DemandSet:
+        var = model.SlackDemandImport[a, e, t]
+        if var.value is not None:
+            tot_slack_imp += value(var)
+
+    tot_slack_exp = 0.0
+    for (a, e, t) in model.DemandSet:
+        var = model.SlackDemandExport[a, e, t]
+        if var.value is not None:
+            tot_slack_exp += value(var)
+
+    penalty = cfg.penalty
+
+    print('slackImport ', tot_slack_imp)
+    print('slackExport ', tot_slack_exp)
+    print('penalty ', penalty)
+
     decomp.append({
         "Element": "Slack",
         "Contribution": -penalty * (tot_slack_imp + tot_slack_exp)

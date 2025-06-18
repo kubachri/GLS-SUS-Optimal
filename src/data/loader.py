@@ -5,10 +5,8 @@ import re
 import pandas as pd
 import numpy as np
 
-# directory containing all the .inc files
-INC_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '../..', 'inc_data_GLS')
-)
+# Will be set at runtime by load_data(cfg)
+INC_DIR = None
 
 
 def read_set(name):
@@ -133,8 +131,7 @@ def load_demand():
         if not raw.strip(): break
         times.append(raw[:col_starts[0]].strip())
         row = [
-            0.0 if raw[col_starts[j]:col_starts[j+1]].strip()==""
-            else float(raw[col_starts[j]:col_starts[j+1]].strip())
+            0.0 if raw[col_starts[j]:col_starts[j+1]].strip()=="" else float(raw[col_starts[j]:col_starts[j+1]].strip())
             for j in range(len(columns))
         ]
         matrix.append(row)
@@ -216,29 +213,62 @@ def load_price():
 def load_profile():
     """
     Parse Profile.inc → DataFrame indexed by Hour-*, columns = each tech.
+    Handles wrapped rows via stitching, and computes true column spans
+    via regex rather than header.index().
     """
     path = os.path.join(INC_DIR, "Profile.inc")
     with open(path, encoding='utf-8') as f:
         lines = f.readlines()
 
+    # 1) Find header line
     hdr = next(i for i, L in enumerate(lines)
                if L.strip() and not L.lstrip().startswith("*") and not L.lstrip().startswith("Table"))
     header_line = lines[hdr].rstrip("\n")
-    cols        = header_line.split()
-    starts      = [header_line.index(c) for c in cols] + [len(header_line)]
 
-    times, data_rows = [], []
+    # 2) Build cols + exact start/end spans via regex
+    matches = list(re.finditer(r"\S+", header_line))
+    cols   = [m.group() for m in matches]
+    starts = [m.start() for m in matches]
+    ends   = [m.end()   for m in matches] + [len(header_line)]
+
+    # 3) Stitch wrapped rows
+    times          = []
+    data_str_rows  = []
+    current_time   = None
+    current_buffer = ""
+
     for raw in lines[hdr+1:]:
-        if not raw.strip() or raw.lstrip().startswith("*") or raw.strip().startswith("/"): break
-        times.append(raw[:starts[0]].strip())
-        row = [
-            0.0 if raw[starts[j]:starts[j+1]].strip()=="" else float(raw[starts[j]:starts[j+1]].strip())
-            for j in range(len(cols))
-        ]
+        if not raw.strip() or raw.lstrip().startswith("*") or raw.strip().startswith("/"):
+            break
+
+        prefix = raw[:starts[0]]
+        rest   = raw[starts[0]:].rstrip("\n")
+
+        if prefix.strip():
+            # new logical row
+            if current_time is not None:
+                data_str_rows.append(current_buffer)
+            current_time   = prefix.strip()
+            times.append(current_time)
+            current_buffer = rest
+        else:
+            # continuation
+            current_buffer += rest
+
+    # append last
+    if current_time is not None:
+        data_str_rows.append(current_buffer)
+
+    # 4) Slice each logical row into floats
+    data_rows = []
+    for row_str in data_str_rows:
+        row = []
+        for j in range(len(cols)):
+            cell = row_str[starts[j]-starts[0] : ends[j]-starts[0]].strip()
+            row.append(0.0 if cell == "" else float(cell))
         data_rows.append(row)
 
     return pd.DataFrame(data_rows, index=times, columns=cols)
-
 
 def load_units():
     """
@@ -252,13 +282,16 @@ def load_units():
     return [tok for tok in re.split(r"[,\s]+", m.group(1).strip()) if tok]
 
 
-def load_data():
+def load_data(cfg):
     """
-    Glue together all loads into the dict expected by the model:
-      A, T, FlowSet, G, F, G_s, location, Profile, Demand,
-      price_buy, price_sell, Xcap, sigma_in, sigma_out, Cvar, Cstart,
-      UC, RR, capacity, SOC_init, SOC_max, Units, storage_fuel
+    Glue together all loads into the dict expected by the model.
+    First sets INC_DIR based on cfg.data_dir.
     """
+    global INC_DIR
+    INC_DIR = cfg.data_dir
+    if not os.path.isdir(INC_DIR):
+        raise FileNotFoundError(f"Could not find data folder: {INC_DIR}")
+
     data = {}
     # sets
     data['A']       = load_areas()
@@ -266,8 +299,7 @@ def load_data():
     data['FlowSet'] = load_flowset()
 
     # location mapping
-    loc = load_location_entries()
-    data['location'] = loc
+    data['location'] = load_location_entries()
 
     # tech & fuels
     tech_df = load_techdata()
@@ -278,14 +310,19 @@ def load_data():
 
     # time-series
     prof_df = load_profile()
-    data['Profile'] = {(tech, time): float(prof_df.at[time, tech])
-                        for tech in prof_df.columns for time in prof_df.index}
+    data['Profile'] = {
+        (tech, time): float(prof_df.at[time, tech])
+        for tech in prof_df.columns
+        for time in prof_df.index
+    }
 
     dem_df = load_demand()
-    data['Demand'] = {(area, fuel, t): float(dem_df.at[t, col])
-                      for col in dem_df.columns
-                      for (area, fuel) in [col.split('.',1)]
-                      for t in dem_df.index}
+    data['Demand'] = {
+        (area, fuel, t): float(dem_df.at[t, col])
+        for col in dem_df.columns
+        for (area, fuel) in [col.split('.',1)]
+        for t in dem_df.index
+    }
 
     price_df = load_price()
     data['price_buy'], data['price_sell'] = {}, {}
@@ -299,10 +336,12 @@ def load_data():
                 data['price_sell'][(area, energy, t)] = price
 
     ic_df = load_interconnector_capacity()
-    data['Xcap'] = {(area, energy, t): float(ic_df.at[t, col])
-                    for col in ic_df.columns
-                    for (area, energy) in [col.split('.',1)]
-                    for t in ic_df.index}
+    data['Xcap'] = {
+        (area, energy, t): float(ic_df.at[t, col])
+        for col in ic_df.columns
+        for (area, energy) in [col.split('.',1)]
+        for t in ic_df.index
+    }
 
     # techno-economic
     data['capacity'] = tech_df['Capacity'].to_dict()
@@ -319,14 +358,15 @@ def load_data():
             sig_out[(tech, fuel)] = cm_df.at[tech, exp] if exp in cm_df.columns else 0.0
     data['sigma_in'], data['sigma_out'] = sig_in, sig_out
 
-    # UC/RR from preprocessing will fill data['UC'] and data['RR']
     # SOC init/max from tech_df
     data['SOC_init'] = {g: tech_df.at[g, 'InitialVolume'] for g in data['G_s']}
     data['SOC_max']  = {g: tech_df.at[g, 'StorageCap']     for g in data['G_s']}
 
     # units & storage fuel mapping
     data['Units'] = load_units()
-    data['storage_fuel'] = {g: next(f for f in data['F'] if sig_in.get((g,f),0)+sig_out.get((g,f),0)>0)
-                            for g in data['G_s']}
+    data['storage_fuel'] = {
+        g: next(f for f in data['F'] if sig_in.get((g,f),0)+sig_out.get((g,f),0)>0)
+        for g in data['G_s']
+    }
 
     return data

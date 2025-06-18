@@ -26,7 +26,7 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
         The constructed and fully specified Pyomo optimization model.
     """
     # 1) Load raw data
-    data    = load_data()
+    data    = load_data(cfg)
     tech_df = load_techdata()
 
     # 2) Preprocess technology parameters (scaling capacity, minima, ramp rates)
@@ -46,6 +46,6 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
     define_params(model, data, tech_df)
     define_variables(model)
     add_constraints(model)
-    define_objective(model, penalty=cfg.penalty)
+    define_objective(model, cfg=cfg)
 
     return model

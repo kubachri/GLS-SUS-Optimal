@@ -1,8 +1,15 @@
 # src/config.py
 from dataclasses import dataclass
+import os
 
 @dataclass
 class ModelConfig:
     test_mode: bool   = False   # run a short “N_test” horizon?
     n_test:    int    = 168     # number of hours in test mode
-    penalty:   float  = 1e6     # slack‐penalty in objective
+    penalty:   float  = 1e20     # slack‐penalty in objective
+    data:      str    = 'inc_data_GLS'  # name of folder under project root
+
+    @property
+    def data_dir(self) -> str:
+        root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        return os.path.join(root, self.data)

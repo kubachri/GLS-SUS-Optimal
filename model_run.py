@@ -5,6 +5,7 @@ from src.config           import ModelConfig
 from src.model.builder    import build_model
 from src.data.loader import load_data
 from src.utils.export_resultT import export_results
+from src.model.objective import debug_objective
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -12,15 +13,18 @@ def parse_args():
                    help="short horizon test run")
     p.add_argument('--n-test', type=int, default=168,
                    help="hours to keep when --test is on")
-    p.add_argument('--penalty', type=float, default=1e6,
+    p.add_argument('--penalty', type=float, default=1e20,
                    help="penalty multiplier for slack in objective")
+    p.add_argument('--data', type=str, default='inc_data_GLS',
+                   help = "name of the folder under project root to use for 'inc_data_*'")
     return p.parse_args()
 
 def main():
     args = parse_args()
     cfg = ModelConfig(test_mode=args.test,
                       n_test=args.n_test,
-                      penalty=args.penalty)
+                      penalty=args.penalty,
+                      data=args.data)
 
     model = build_model(cfg)
 
@@ -61,7 +65,8 @@ def main():
         print("LP solve finished.\n")
 
     # export_results_to_excel(model)
-    export_results(model)
+    export_results(model, cfg)
+    debug_objective(model, cfg)
 
 if __name__ == '__main__':
     main()

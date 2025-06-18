@@ -77,11 +77,6 @@ def define_params(model, data, tech_df):
     model.InterconnectorCapacity = Param(model.LinesInterconnectors, model.F, model.T,
                                          initialize=Xcap, default= 0, within=NonNegativeReals)
 
-    # Then, overwrite only electricity values
-    for a in model.LinesInterconnectors:
-        for t in model.T:
-            Xcap[(a, 'Electricity', t)] = 10
-
     if model.Demand_Target:
         # 1) Define weekOfT[t] = integer in {1, 2, …, n_weeks}
         #    where each week covers 168 time‐steps in T.

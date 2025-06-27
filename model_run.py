@@ -3,7 +3,6 @@ import argparse
 from pyomo.environ import SolverFactory, Suffix, value, Var, Binary
 from src.config           import ModelConfig
 from src.model.builder    import build_model
-from src.data.loader import load_data
 from src.utils.export_resultT import export_results
 from src.model.objective import debug_objective
 from pyomo.repn import generate_standard_repn
@@ -11,6 +10,7 @@ from pyomo.core.base.constraint import Constraint
 import csv
 import time
 from datetime import datetime
+from src.utils.max_contraint_violation import detect_max_constraint_violation
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -73,7 +73,8 @@ def main():
         model.dual = Suffix(direction=Suffix.IMPORT)
 
     # 3) Solve the MIP
-    solver = SolverFactory('gurobi')
+    solver = SolverFactory('gurobi_persistent')
+    solver.set_instance(model)
     solver.options['MIPGap'] = 0.0015
     print("Solving MIP …\n")
 
@@ -87,6 +88,16 @@ def main():
     else:
         mins, secs = divmod(int(mip_elapsed), 60)
         print(f"MIP Solve time: {mins:02d}:{secs:02d} (mm:ss)\n")
+
+    termination = str(mip_result.solver.termination_condition).lower()
+    if "infeasible" in termination:
+        print("\nModel reported infeasible. Attempting IIS extraction...\n")
+        from src.utils.infeasibilities import compute_gurobi_iis
+        compute_gurobi_iis(model, solver)
+        return  # Stop further pipeline execution if infeasible
+
+    print("Checking constraint violations after MIP solve...")
+    detect_max_constraint_violation(model, threshold=1e-4, top_n=10)
 
     if model.Demand_Target:
 

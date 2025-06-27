@@ -363,14 +363,12 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     for (a, e, t) in model.DemandSet:
         var = model.SlackDemandImport[a, e, t]
         if var.value is not None:
-            print(e, var.value)
             tot_slack_imp += value(var)
 
     tot_slack_exp = 0.0
     for (a, e, t) in model.DemandSet:
         var = model.SlackDemandExport[a, e, t]
         if var.value is not None:
-            print(e, var.value)
             tot_slack_exp += value(var)
 
     penalty = cfg.penalty

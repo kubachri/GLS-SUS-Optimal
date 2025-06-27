@@ -115,11 +115,6 @@ def balance_rule(m, a, e, t):
 def demand_time_rule(m, a, e, t):
     # 1) GAMS $-guard: only if there is any demand at all for (a,e)
     total_area_energy = sum(m.demand[a,e,tt] for tt in m.T)
-    if a=='DK1' and e=='Biomethane' and t=='Hour-1':
-        print("In rule for DK1, Biomethane, Hour-1: demand =", m.demand[a,e,t])
-        print(total_area_energy)
-    # print(f'commodity: {e}, total_area_energy:{total_area_energy}')
-    # print('-----------------')
     if total_area_energy <= 0:
         return Constraint.Skip
     # 2) LHS terms, zero when not defined in the corresponding set

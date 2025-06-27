@@ -6,6 +6,9 @@ from src.model.builder    import build_model
 from src.data.loader import load_data
 from src.utils.export_resultT import export_results
 from src.model.objective import debug_objective
+from pyomo.repn import generate_standard_repn
+from pyomo.core.base.constraint import Constraint
+import csv
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -13,7 +16,7 @@ def parse_args():
                    help="short horizon test run")
     p.add_argument('--n-test', type=int, default=168,
                    help="hours to keep when --test is on")
-    p.add_argument('--penalty', type=float, default=1e20,
+    p.add_argument('--penalty', type=float, default=100000,
                    help="penalty multiplier for slack in objective")
     p.add_argument('--data', type=str, default='inc_data_GLS',
                    help = "name of the folder under project root to use for 'inc_data_*'")
@@ -26,7 +29,32 @@ def main():
                       penalty=args.penalty,
                       data=args.data)
 
+    # def detect_extremes_to_file(m, filename='extremes.csv', small=1e-6, large=1e12):
+    #     with open(filename, 'w', newline='') as csvfile:
+    #         writer = csv.writer(csvfile)
+    #         writer.writerow(['Constraint', 'Variable', 'Coefficient'])
+    #         for c in m.component_data_objects(Constraint, active=True):
+    #             repn = generate_standard_repn(c.body)
+    #             for coef, var in zip(repn.linear_coefs, repn.linear_vars):
+    #                 if abs(coef) < small or abs(coef) > large:
+    #                     writer.writerow([c.name, var.name, f"{coef:.3g}"])
+    #     print(f"Written extremes to {filename}")
+    #
+    # def detect_one_hour(m, hour_str="Hour-1", small=1e-6, large=1e12):
+    #     print(f"Scanning only for instances containing '{hour_str}' …")
+    #     for c in m.component_data_objects(Constraint, active=True):
+    #         if hour_str not in c.name:
+    #             continue
+    #         repn = generate_standard_repn(c.body)
+    #         for coef, var in zip(repn.linear_coefs, repn.linear_vars):
+    #             if abs(coef) < small or abs(coef) > large:
+    #                 print(f"{c.name:25s} {var.name:40s} coef = {coef:.3g}")
+    #         break  # stop after the first matching constraint
+    #     print("… done.\n")
+
     model = build_model(cfg)
+    # detect_one_hour(model, hour_str="Hour-1")
+    # detect_extremes_to_file(model)
 
     if model.Demand_Target:
         # 2) Tell Pyomo we want to import duals (for later LP)

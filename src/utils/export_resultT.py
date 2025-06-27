@@ -432,8 +432,3 @@ def export_results(model, cfg: ModelConfig, path: str = None):
 
         #Objective function decomposition
         df_decomp.to_excel(writer, sheet_name="ObjDecomp", index=False)
-
-    print(
-        f"Wrote ResultT_all, ResultTsum, Flows, ResultFsum, "
-        f"ResultA_all, ResultAsum and ResultC to {output.resolve()}"
-    )

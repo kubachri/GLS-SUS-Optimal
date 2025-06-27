@@ -9,6 +9,8 @@ from src.model.objective import debug_objective
 from pyomo.repn import generate_standard_repn
 from pyomo.core.base.constraint import Constraint
 import csv
+import time
+from datetime import datetime
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -23,6 +25,13 @@ def parse_args():
     return p.parse_args()
 
 def main():
+
+    start_time = time.time()
+    print("==========================")
+    print("Model Run Started")
+    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("==========================\n")
+
     args = parse_args()
     cfg = ModelConfig(test_mode=args.test,
                       n_test=args.n_test,
@@ -52,7 +61,10 @@ def main():
     #         break  # stop after the first matching constraint
     #     print("… done.\n")
 
+    print("Building Pyomo model ...\n")
     model = build_model(cfg)
+    print("Model built successfully.\n")
+
     # detect_one_hour(model, hour_str="Hour-1")
     # detect_extremes_to_file(model)
 
@@ -63,13 +75,24 @@ def main():
     # 3) Solve the MIP
     solver = SolverFactory('gurobi')
     solver.options['MIPGap'] = 0.0015
-    print("Solving MIP …")
+    print("Solving MIP …\n")
+
+    mip_start = time.time()
     mip_result = solver.solve(model, tee=True)
+    mip_end = time.time()
     print("MIP solve finished.\n")
+    mip_elapsed = mip_end - mip_start
+    if mip_elapsed < 60:
+        print(f"MIP Solve time: {int(mip_elapsed)} seconds\n")
+    else:
+        mins, secs = divmod(int(mip_elapsed), 60)
+        print(f"MIP Solve time: {mins:02d}:{secs:02d} (mm:ss)\n")
 
     if model.Demand_Target:
 
         # After solving the MIP, but before fixing binaries:
+        print("Fixing binaries before LP dual extraction ...\n")
+
         seen = set()
         for varobj in model.component_data_objects(Var, descend_into=True):
             if varobj.domain is Binary and varobj.value is not None:
@@ -87,14 +110,36 @@ def main():
                 varobj.fix(varobj.value)
 
         # 5) Clear any old duals, then re‐solve as an LP to get duals
+        print("Re‐solving as an LP to extract duals …\n")
+        lp_start = time.time()
         model.dual.clear()
-        print("Re‐solving as an LP to extract duals …")
         lp_result = solver.solve(model, tee=False)
-        print("LP solve finished.\n")
+        lp_end = time.time()
+        print("LP solve finished.")
+        lp_elapsed = lp_end - lp_start
+        if lp_elapsed < 60:
+            print(f"LP Solve time: {int(lp_elapsed)} seconds\n")
+        else:
+            mins, secs = divmod(int(lp_elapsed), 60)
+            print(f"LP Solve time: {mins:02d}:{secs:02d} (mm:ss)\n")
+        print(f"LP termination condition: {lp_result.solver.termination_condition}\n")
 
     # export_results_to_excel(model)
+    print("Exporting results to Excel ...")
     export_results(model, cfg)
+    print("Results exported successfully.")
     debug_objective(model, cfg)
+
+    elapsed = time.time() - start_time
+    print("\n==========================")
+    print("Pyomo Model Run Completed")
+    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    if elapsed < 60:
+        print(f"Total runtime: {int(elapsed)} seconds")
+    else:
+        mins, secs = divmod(int(elapsed), 60)
+        print(f"Total runtime: {mins:02d}:{secs:02d} (mm:ss)")
+    print("==========================")
 
 if __name__ == '__main__':
     main()

@@ -29,10 +29,13 @@ def main():
     print("==========================\n")
 
     args = parse_args()
-    cfg = ModelConfig(test_mode=args.test,
-                      n_test=args.n_test,
-                      penalty=args.penalty,
-                      data=args.data)
+    defaults = ModelConfig()
+    cfg = ModelConfig(
+        test_mode=args.test,
+        n_test=args.n_test if args.n_test is not None else defaults.n_test,
+        penalty=args.penalty if args.penalty is not None else defaults.penalty,
+        data=args.data if args.data is not None else defaults.data
+    )
 
     # def detect_extremes_to_file(m, filename='extremes.csv', small=1e-6, large=1e12):
     #     with open(filename, 'w', newline='') as csvfile:

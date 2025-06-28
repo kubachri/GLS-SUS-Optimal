@@ -37,35 +37,9 @@ def main():
         data=args.data if args.data is not None else defaults.data
     )
 
-    # def detect_extremes_to_file(m, filename='extremes.csv', small=1e-6, large=1e12):
-    #     with open(filename, 'w', newline='') as csvfile:
-    #         writer = csv.writer(csvfile)
-    #         writer.writerow(['Constraint', 'Variable', 'Coefficient'])
-    #         for c in m.component_data_objects(Constraint, active=True):
-    #             repn = generate_standard_repn(c.body)
-    #             for coef, var in zip(repn.linear_coefs, repn.linear_vars):
-    #                 if abs(coef) < small or abs(coef) > large:
-    #                     writer.writerow([c.name, var.name, f"{coef:.3g}"])
-    #     print(f"Written extremes to {filename}")
-    #
-    # def detect_one_hour(m, hour_str="Hour-1", small=1e-6, large=1e12):
-    #     print(f"Scanning only for instances containing '{hour_str}' …")
-    #     for c in m.component_data_objects(Constraint, active=True):
-    #         if hour_str not in c.name:
-    #             continue
-    #         repn = generate_standard_repn(c.body)
-    #         for coef, var in zip(repn.linear_coefs, repn.linear_vars):
-    #             if abs(coef) < small or abs(coef) > large:
-    #                 print(f"{c.name:25s} {var.name:40s} coef = {coef:.3g}")
-    #         break  # stop after the first matching constraint
-    #     print("… done.\n")
-
     print("Building Pyomo model ...\n")
     model = build_model(cfg)
     print("Model built successfully.\n")
-
-    # detect_one_hour(model, hour_str="Hour-1")
-    # detect_extremes_to_file(model)
 
     if model.Demand_Target:
         # 2) Tell Pyomo we want to import duals (for later LP)

@@ -335,15 +335,6 @@ def load_data(cfg):
             else:
                 data['price_sell'][(area, energy, t)] = price
 
-    # drop any sell-price below your tolerance entirely
-    THRESHOLD = 1e-6
-    for key, p in data['price_sell'].items():
-        if abs(p) < THRESHOLD:
-            data['price_sell'][key] = 0.01
-    for key, p in data['price_buy'].items():
-        if abs(p) < THRESHOLD:
-            data['price_buy'][key] = 0.01
-
     ic_df = load_interconnector_capacity()
     data['Xcap'] = {
         (area, energy, t): float(ic_df.at[t, col])

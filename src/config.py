@@ -7,7 +7,7 @@ class ModelConfig:
     test_mode: bool   = False   # run a short “N_test” horizon?
     n_test:    int    = 168     # number of hours in test mode
     penalty:   float  = 100000     # slack‐penalty in objective
-    data:      str    = 'inc_data_GLS'  # name of folder under project root
+    data:      str    = 'inc_data'  # name of folder under project root
 
     @property
     def data_dir(self) -> str:

@@ -9,7 +9,7 @@ from pyomo.repn import generate_standard_repn
 from pyomo.core.base.constraint import Constraint
 import csv
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.utils.max_contraint_violation import detect_max_constraint_violation
 
 def parse_args():
@@ -144,12 +144,8 @@ def main():
     print("\n==========================")
     print("Pyomo Model Run Completed")
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    if elapsed < 60:
-        print(f"Total runtime: {int(elapsed)} seconds")
-    else:
-        mins, secs = divmod(int(elapsed), 60)
-        print(f"Total runtime: {mins:02d}:{secs:02d} (mm:ss)")
-    print("==========================")
+    elapsed_td = timedelta(seconds=int(elapsed))
+    print(f"Total runtime: {elapsed_td}")
 
 if __name__ == '__main__':
     main()

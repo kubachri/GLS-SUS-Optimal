@@ -14,14 +14,10 @@ from src.utils.max_contraint_violation import detect_max_constraint_violation
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument('--test', action='store_true',
-                   help="short horizon test run")
-    p.add_argument('--n-test', type=int, default=168,
-                   help="hours to keep when --test is on")
-    p.add_argument('--penalty', type=float, default=100000,
-                   help="penalty multiplier for slack in objective")
-    p.add_argument('--data', type=str, default='inc_data_GLS',
-                   help = "name of the folder under project root to use for 'inc_data_*'")
+    p.add_argument('--test', action='store_true', help="short horizon test run")
+    p.add_argument('--n-test', type=int, help="hours to keep when --test is on")
+    p.add_argument('--penalty', type=float, help="penalty multiplier for slack in objective")
+    p.add_argument('--data', type=str, help = "name of the folder under project root to use for 'inc_data_*'")
     return p.parse_args()
 
 def main():

@@ -44,7 +44,7 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
     #DemandTarget
     model.Demand_Target = False
 
-    if not model.Demand_Target:
+    if model.Demand_Target:
         print("Running with a demand target ...\n")
 
     define_sets(model, data, tech_df)

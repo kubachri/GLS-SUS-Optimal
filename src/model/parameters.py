@@ -95,3 +95,4 @@ def define_params(model, data, tech_df):
         weekly_target = float(new_target / len(model.W))
         demand_dict = { w: weekly_target for w in model.W}
         model.methanol_demand_week = Param(model.W, initialize=demand_dict, within=NonNegativeReals)
+        print(f"Weeekly demand target: {int(weekly_target)} tons per week.\n")

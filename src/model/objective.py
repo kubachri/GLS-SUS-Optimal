@@ -6,7 +6,6 @@ from src.config import ModelConfig
 def define_objective(m, cfg: ModelConfig):
     # ProfitDefinition handled in a constraint
     penalty = cfg.penalty
-    print('penalty is ', penalty)
 
     def profit_definition_rule(m):
         # a) Fuel cost (imports are a positive cost → negative in objective)

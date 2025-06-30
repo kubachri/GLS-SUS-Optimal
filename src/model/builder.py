@@ -36,11 +36,16 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
     if cfg.test_mode:
         data = slice_time_series(data, cfg.n_test)
 
+    print("All data loaded.\n")
+
     # 4) Assemble the model
     model = ConcreteModel()
 
     #DemandTarget
     model.Demand_Target = False
+
+    if not model.Demand_Target:
+        print("Running with a demand target ...\n")
 
     define_sets(model, data, tech_df)
     define_params(model, data, tech_df)

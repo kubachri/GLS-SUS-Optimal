@@ -5,6 +5,7 @@ from pyomo.environ import Constraint
 # 1) Flows imported to technologies
 def fuelmix_rule(m, g, e, t):
     if m.capacity[g] <= 0:
+        print(f'Technology {g} does not have a capacity value.')
         return Constraint.Skip
     return m.in_frac[g,e] * m.Fuelusetotal[g,t] == m.Fueluse[g,e,t]
 
@@ -12,6 +13,7 @@ def fuelmix_rule(m, g, e, t):
 # 2) Production for each non-storage technology
 def production_rule(m, g, e, t):
     if m.capacity[g] <= 0:
+        print(f'Technology {g} does not have a capacity value.')
         return Constraint.Skip
     if g in m.G_s:
         return Constraint.Skip

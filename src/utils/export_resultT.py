@@ -70,8 +70,20 @@ def export_results(model, cfg: ModelConfig, path: str = None):
             imp_price  = sum(model.price_buy[a, e, t]  for a in model.A if (a, e) in model.buyE)
             sale_price = sum(model.price_sale[a, e, t] for a in model.A if (a, e) in model.saleE)
             row[str(t)] = imp_qty * imp_price - sale_qty * sale_price
+            if g=='WindTurbine':
+                if t=='Hour-1' or t=='Hour-2':
+                    print(f'Tech:{g}')
+                    print(f'Energy:{e}')
+                    print(f'imp_qty: {imp_qty}')
+                    print(f'sale_qty: {sale_qty}')
+                    print(f'imp_price: {imp_price}')
+                    print(f'sale_price: {sale_price}')
+                    print(imp_qty * imp_price - sale_qty * sale_price)
         cost.append(row)
     df_cost = pd.DataFrame(cost)
+    print('!!! ATTENTION !!!')
+    print('df_cost for things you dont import or export is wrong (e.g. cost from on-site RES)\n'
+          'The model prints out as cost, the ELECTRICITY produced by RES * export_price of electricity on the market.\n')
 
     # 3d) Startcost_EUR
     start = []

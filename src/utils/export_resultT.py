@@ -303,16 +303,17 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     # --- ResultC (capacity factors) ---------------------------------
     # ----------------------------------------------------------------
     C_rows = []
-    for tech in model.G:
-        cap = value(model.capacity[tech])
+    for tech,fuel in model.TechToEnergy:
+        cap = value(model.original_capacity[tech])
         row = {'Result': 'CapacityFactor', 'tech': tech}
-        fuels = [e for (g,e) in model.f_out if g == tech]
+        print(tech, fuel, cap)
         for t in times:
-            gen_sum = sum(value(model.Generation[tech, e, t]) for e in fuels)
-            row[str(t)] = gen_sum / cap if cap != 0 else 0
+            gen= value(model.Generation[tech, fuel, t])
+            row[str(t)] = gen / cap if cap != 0 else 0
         C_rows.append(row)
 
     df_C_hourly = pd.DataFrame(C_rows, columns=['Result','tech'] + time_cols)
+    print(df_C_hourly)
 
     summary_cf = []
     summary_flh = []
@@ -328,6 +329,7 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         summary_flh.append({'Result': 'FullLoadHours','tech': tech,'FLH': avg_cf * ntimes})
 
     df_C_summary = pd.DataFrame(summary_cf + summary_flh, columns=['Result','tech','Average_CF','FLH'])
+    print(df_C_summary)
 
     # 9) Objective decomposition (total over all time‐steps, by element)
     decomp = []

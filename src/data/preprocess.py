@@ -44,6 +44,7 @@ def scale_tech_parameters(data, tech_df):
     data['UC']       = UC
     data['RR']       = RR
     data['capacity'] = capacity
+    data['original_cap'] = orig_cap
 
     return data, tech_df
 
@@ -67,6 +68,7 @@ def slice_time_series(data, n_hours):
     data['price_buy']  = _keep(data['price_buy'])
     data['price_sell'] = _keep(data['price_sell'])
     data['Xcap']       = _keep(data['Xcap'])
+    
 
     # 5) Override the time‐set itself
     data['T'] = T_short

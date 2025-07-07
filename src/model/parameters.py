@@ -20,6 +20,7 @@ def define_params(model, data, tech_df):
     flowset     = data['FlowSet']
     A           = data['A']
     capacity = data['capacity']
+    original_capacity = data['original_cap']
 
     # 2) Efficiency Fe per tech
     Fe = {}
@@ -62,6 +63,7 @@ def define_params(model, data, tech_df):
     # === Now attach all to the model ===
     model.Profile = Param(model.G, model.T, initialize=profile, within=NonNegativeReals)
     model.capacity = Param(model.G, initialize=capacity, within=NonNegativeReals)
+    model.original_capacity = Param(model.G, initialize=original_capacity, within=NonNegativeReals)
     model.Fe       = Param(model.G,          initialize=Fe,         within=NonNegativeReals)
     model.soc_init = Param(model.G_s,        initialize=soc_init,   within=NonNegativeReals)
     model.soc_max  = Param(model.G_s,        initialize=soc_max,    within=NonNegativeReals)

@@ -306,30 +306,35 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     for tech,fuel in model.TechToEnergy:
         cap = value(model.original_capacity[tech])
         row = {'Result': 'CapacityFactor', 'tech': tech}
-        print(tech, fuel, cap)
         for t in times:
             gen= value(model.Generation[tech, fuel, t])
             row[str(t)] = gen / cap if cap != 0 else 0
         C_rows.append(row)
 
     df_C_hourly = pd.DataFrame(C_rows, columns=['Result','tech'] + time_cols)
-    print(df_C_hourly)
 
     summary_cf = []
     summary_flh = []
-    for tech in model.G:
-        cap = value(model.capacity[tech])
-        fuels = [e for (g,e) in model.f_out if g == tech]
+    for tech,fuel in model.TechToEnergy:
+        cap = value(model.original_capacity[tech])
         total_gen = sum(
-            value(model.Generation[tech, e, t])
-            for e in fuels for t in times
+            value(model.Generation[tech, fuel, t]) 
+            for t in times
         )
         avg_cf = total_gen / (cap * ntimes) if cap != 0 else 0
-        summary_cf.append({'Result': 'CapacityFactor_Summary','tech': tech,'Average_CF': avg_cf})
-        summary_flh.append({'Result': 'FullLoadHours','tech': tech,'FLH': avg_cf * ntimes})
+        summary_cf.append({'tech': tech, 'Average_CF': avg_cf})
+        summary_flh.append({'tech': tech, 'FLH': avg_cf * ntimes})
 
-    df_C_summary = pd.DataFrame(summary_cf + summary_flh, columns=['Result','tech','Average_CF','FLH'])
-    print(df_C_summary)
+    avg_cf_dict = { r['tech']: r['Average_CF'] for r in summary_cf }
+    flh_dict    = { r['tech']: r['FLH']        for r in summary_flh }
+
+    # Make the 2×N DataFrame
+    df_Csum = pd.DataFrame(
+        [ avg_cf_dict, flh_dict ],
+        index=['CapacityFactor','FLH']
+    )
+    df_Csum.index.name = 'Result'
+    print(df_Csum)
 
     # 9) Objective decomposition (total over all time‐steps, by element)
     decomp = []
@@ -428,13 +433,16 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         df_Asum.to_excel(writer, sheet_name='ResultAsum', index=False)
 
         # 7) ResultC – hourly capacity factors
-        df_C_hourly.to_excel(writer, sheet_name='ResultC', index=False, startrow=0)
-        #    blank row, then summary (CF_Summary & FLH)
-        df_C_summary.to_excel(
+        df_C_hourly.to_excel(
             writer,
             sheet_name='ResultC',
-            index=False,
-            startrow=len(df_C_hourly) + 2
+            index=False
+        )
+
+        # 8) ResultCsum    – the 2×N pivot (CapacityFactor and FLH)
+        df_Csum.to_excel(
+            writer,
+            sheet_name='ResultCsum'
         )
 
         # 8) Duals – hourly and weekly dual values

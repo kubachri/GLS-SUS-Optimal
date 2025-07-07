@@ -43,6 +43,9 @@ def define_sets(model, data):
     buy_pairs  = sorted({(a, e) for (a, e, t), p in data['price_buy'].items()  if p > 0})
     sale_pairs = sorted({(a, e) for (a, e, t), p in data['price_sell'].items() if p > 0})
 
+    #Designated technology - fuel pairs
+    tech_to_f = [(g,f) for (g,f), out in data['sigma_out'].items() if out == 1]
+
     # Areas that have interconnector capacity
     area_has = defaultdict(bool)
     for (a, f, t), cap in data['Xcap'].items():
@@ -87,6 +90,7 @@ def define_sets(model, data):
     model.saleE = Set(initialize=sale_pairs, dimen=2, within=model.A * model.F)
     model.LinesInterconnectors = Set(initialize=lines, within=model.A)
     model.DemandSet = Set(initialize=raw_demand.keys(), dimen=3, within=model.A * model.F * model.T)
+    model.TechToEnergy = Set(initialize=tech_to_f, dimen=2, within=model.G * model.F)
 
     if model.Demand_Target:
         # Demand Target

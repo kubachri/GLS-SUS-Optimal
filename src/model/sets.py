@@ -3,7 +3,7 @@
 from pyomo.environ import Set
 from collections import defaultdict
 
-def define_sets(model, data, tech_df):
+def define_sets(model, data):
     """
     Define Pyomo Sets on the model using preprocessed data:
       - A: areas

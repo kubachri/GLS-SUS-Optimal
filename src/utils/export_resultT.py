@@ -408,13 +408,13 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     # ----------------------------------------------------------------
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         # 1) ResultT – hourly
-        df_T.to_excel(writer, sheet_name='ResultT_all', index=False)
+        df_T.to_excel(writer, sheet_name='ResultT', index=False)
 
         # 2) ResultTsum – pivoted & ordered
         df_Tsum.to_excel(writer, sheet_name='ResultTsum', index=False)
 
         # 3) Flows – hourly
-        df_F.to_excel(writer, sheet_name='Flows', index=False)
+        df_F.to_excel(writer, sheet_name='ResultF', index=False)
 
         # 4) ResultFsum – pivoted
         df_Fsum = (
@@ -427,7 +427,7 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         df_Fsum.to_excel(writer, sheet_name='ResultFsum', index=False)
 
         # 5) ResultA – hourly
-        df_A.to_excel(writer, sheet_name='ResultA_all', index=False)
+        df_A.to_excel(writer, sheet_name='ResultA', index=False)
 
         # 6) ResultAsum – pivoted, with “Electricity” prices averaged
         df_Asum.to_excel(writer, sheet_name='ResultAsum', index=False)

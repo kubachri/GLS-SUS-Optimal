@@ -28,13 +28,6 @@ def define_sets(model, data):
     # Demand
     raw_demand = data['Demand']
 
-    # Technology-to-energy export mapping
-    pairs_TE = [
-        (g, f)
-        for (g, f), out in data['sigma_out'].items()
-        if out > 0
-    ]
-
     # Fuel import/export pairs
     pairs_out = [(g, f) for (g, f), out in data['sigma_out'].items() if out > 0]
     pairs_in  = [(g, f) for (g, f), inp in data['sigma_in'].items()  if inp > 0]
@@ -79,11 +72,7 @@ def define_sets(model, data):
         dimen=3,
         within=model.A * model.A * model.F
     )
-    model.TechToEnergy = Set(
-        initialize=pairs_TE,
-        dimen=2,
-        within=model.G * model.F
-    )
+
     model.f_out = Set(initialize=pairs_out, dimen=2, within=model.G * model.F)
     model.f_in  = Set(initialize=pairs_in,  dimen=2, within=model.G * model.F)
     model.buyE  = Set(initialize=buy_pairs,  dimen=2, within=model.A * model.F)

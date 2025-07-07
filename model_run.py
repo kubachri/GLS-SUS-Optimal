@@ -49,7 +49,7 @@ def main():
     # 3) Solve the MIP
     solver = SolverFactory('gurobi_persistent')
     solver.set_instance(model)
-    solver.options['MIPGap'] = 0.0015
+    solver.options['MIPGap'] = 0.05
     print("Solving MIP …\n")
 
 

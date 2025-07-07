@@ -70,15 +70,6 @@ def export_results(model, cfg: ModelConfig, path: str = None):
             imp_price  = sum(model.price_buy[a, e, t]  for a in model.A if (a, e) in model.buyE)
             sale_price = sum(model.price_sale[a, e, t] for a in model.A if (a, e) in model.saleE)
             row[str(t)] = imp_qty * imp_price - sale_qty * sale_price
-            if g=='WindTurbine':
-                if t=='Hour-1' or t=='Hour-2':
-                    print(f'Tech:{g}')
-                    print(f'Energy:{e}')
-                    print(f'imp_qty: {imp_qty}')
-                    print(f'sale_qty: {sale_qty}')
-                    print(f'imp_price: {imp_price}')
-                    print(f'sale_price: {sale_price}')
-                    print(imp_qty * imp_price - sale_qty * sale_price)
         cost.append(row)
     df_cost = pd.DataFrame(cost)
     print('!!! ATTENTION !!!')
@@ -334,7 +325,6 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         index=['CapacityFactor','FLH']
     )
     df_Csum.index.name = 'Result'
-    print(df_Csum)
 
     # 9) Objective decomposition (total over all time‐steps, by element)
     decomp = []
@@ -454,3 +444,37 @@ def export_results(model, cfg: ModelConfig, path: str = None):
 
         #Objective function decomposition
         df_decomp.to_excel(writer, sheet_name="ObjDecomp", index=False)
+
+
+    # 3) write all sheets in the exact order and with the exact sheet names you asked
+    i = 0
+    while True:
+        filename = f"{base}{'' if i == 0 else f'({i})'}{suffix}"
+        output = folder / filename
+        try:
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                # 1) hourly ResultT
+                df_T.to_excel(writer, sheet_name='ResultT', index=False)
+                # 2) summed ResultT
+                df_Tsum.to_excel(writer, sheet_name='ResultTsum', index=False)
+                # 3) hourly Flows
+                df_F.to_excel(writer, sheet_name='ResultF', index=False)
+                # 4) summed Flows
+                df_Fsum.to_excel(writer, sheet_name='ResultFsum', index=False)
+                # 5) hourly ResultA
+                df_A.to_excel(writer, sheet_name='ResultA', index=False)
+                # 6) summed ResultA
+                df_Asum.to_excel(writer, sheet_name='ResultAsum', index=False)
+                # 7) hourly capacity factors
+                df_C_hourly.to_excel(writer, sheet_name='ResultC', index=False)
+                # 8) summary capacity factors
+                df_C_summary.to_excel(writer, sheet_name='ResultCsum', index=False)
+
+            print(f"✅ Wrote all sheets to {output.resolve()}")
+            break
+
+        except PermissionError:
+            i += 1
+            if i > 100:
+                raise RuntimeError("Could not write after 100 attempts")
+            print(f"⚠️  {output.name} is in use—trying {base}({i}){suffix}…")

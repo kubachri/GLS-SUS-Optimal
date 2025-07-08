@@ -21,15 +21,18 @@ def export_results(model, cfg: ModelConfig, path: str = None):
                         values = sum over hours except for price rows:
                         – for energy=="Electricity", take the average over all hours
                         – for all other energies, take the first‐hour price)
-      - ResultC        (hourly capacity factors + summary below)
+      - ResultC        (hourly capacity factors)
+      - ResultCsum     (Average CF and FLH)
     """
-    # 1) Determine output path
+    # 1) compute base path
     if path is None:
         project_root = Path(__file__).parents[2]
-        output = project_root / "results" / "Results.xlsx"
+        default = project_root / "results" / "Results.xlsx"
     else:
-        output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
+        default = Path(path)
+    default.parent.mkdir(parents=True, exist_ok=True)
+
+    base, suffix, folder = default.stem, default.suffix, default.parent
 
     # 2) Common time index
     times = list(model.T)
@@ -396,57 +399,6 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     # ----------------------------------------------------------------
     # --- Write all sheets (including updated “sum” sheets) ---------
     # ----------------------------------------------------------------
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # 1) ResultT – hourly
-        df_T.to_excel(writer, sheet_name='ResultT', index=False)
-
-        # 2) ResultTsum – pivoted & ordered
-        df_Tsum.to_excel(writer, sheet_name='ResultTsum', index=False)
-
-        # 3) Flows – hourly
-        df_F.to_excel(writer, sheet_name='ResultF', index=False)
-
-        # 4) ResultFsum – pivoted
-        df_Fsum = (
-            df_F
-              .set_index(['areaFrom','areaTo','energy'])[time_cols]
-              .sum(axis=1)             # sum each (areaFrom, areaTo, energy) over all t
-              .unstack(fill_value=0)   # pivot so “energy” becomes columns
-              .reset_index()           # bring “areaFrom” & “areaTo” back as columns
-        )
-        df_Fsum.to_excel(writer, sheet_name='ResultFsum', index=False)
-
-        # 5) ResultA – hourly
-        df_A.to_excel(writer, sheet_name='ResultA', index=False)
-
-        # 6) ResultAsum – pivoted, with “Electricity” prices averaged
-        df_Asum.to_excel(writer, sheet_name='ResultAsum', index=False)
-
-        # 7) ResultC – hourly capacity factors
-        df_C_hourly.to_excel(
-            writer,
-            sheet_name='ResultC',
-            index=False
-        )
-
-        # 8) ResultCsum    – the 2×N pivot (CapacityFactor and FLH)
-        df_Csum.to_excel(
-            writer,
-            sheet_name='ResultCsum'
-        )
-
-        # 8) Duals – hourly and weekly dual values
-        if model.Demand_Target:
-            # write hourly CO2 at the top
-            df_co2.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=0)
-            # then leave one blank line and write the weekly table
-            df_meth.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=3)
-
-        #Objective function decomposition
-        df_decomp.to_excel(writer, sheet_name="ObjDecomp", index=False)
-
-
-    # 3) write all sheets in the exact order and with the exact sheet names you asked
     i = 0
     while True:
         filename = f"{base}{'' if i == 0 else f'({i})'}{suffix}"
@@ -460,15 +412,38 @@ def export_results(model, cfg: ModelConfig, path: str = None):
                 # 3) hourly Flows
                 df_F.to_excel(writer, sheet_name='ResultF', index=False)
                 # 4) summed Flows
+                df_Fsum = (
+                    df_F
+                    .set_index(['areaFrom','areaTo','energy'])[time_cols]
+                    .sum(axis=1)             # sum each (areaFrom, areaTo, energy) over all t
+                    .unstack(fill_value=0)   # pivot so “energy” becomes columns
+                    .reset_index()           # bring “areaFrom” & “areaTo” back as columns
+                )
                 df_Fsum.to_excel(writer, sheet_name='ResultFsum', index=False)
                 # 5) hourly ResultA
                 df_A.to_excel(writer, sheet_name='ResultA', index=False)
                 # 6) summed ResultA
                 df_Asum.to_excel(writer, sheet_name='ResultAsum', index=False)
                 # 7) hourly capacity factors
-                df_C_hourly.to_excel(writer, sheet_name='ResultC', index=False)
+                df_C_hourly.to_excel(
+                    writer,
+                    sheet_name='ResultC',
+                    index=False
+                )
                 # 8) summary capacity factors
-                df_C_summary.to_excel(writer, sheet_name='ResultCsum', index=False)
+                df_Csum.to_excel(
+                    writer,
+                    sheet_name='ResultCsum'
+                )
+                # 9) Duals – hourly and weekly dual values
+                if model.Demand_Target:
+                    # write hourly CO2 at the top
+                    df_co2.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=0)
+                    # then leave one blank line and write the weekly table
+                    df_meth.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=3)
+
+                # 10) Objective function decomposition
+                df_decomp.to_excel(writer, sheet_name="ObjDecomp", index=False)
 
             print(f"✅ Wrote all sheets to {output.resolve()}")
             break
@@ -477,4 +452,8 @@ def export_results(model, cfg: ModelConfig, path: str = None):
             i += 1
             if i > 100:
                 raise RuntimeError("Could not write after 100 attempts")
-            print(f"⚠️  {output.name} is in use—trying {base}({i}){suffix}…")
+            print(f"⚠️  {output.name} is in use—trying {base}({i}){suffix}")
+
+
+
+

@@ -87,6 +87,7 @@ def define_sets(model, data):
         n_periods = len(data['T'])
         steps_per_week = 168
         n_weeks = n_periods // steps_per_week    # integer division → should be 52
+        print(f"Running for {n_weeks} weeks \n")
 
         # 2) Build a Python list [1,2,…,n_weeks]
         week_list = list(range(1, n_weeks + 1))

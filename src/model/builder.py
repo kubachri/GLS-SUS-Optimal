@@ -42,7 +42,7 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
     model = ConcreteModel()
 
     #DemandTarget
-    model.Demand_Target = False
+    model.Demand_Target = cfg.demand_target
 
     if model.Demand_Target:
         print("Running with a demand target ...\n")

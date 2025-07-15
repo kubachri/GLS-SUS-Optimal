@@ -75,7 +75,7 @@ def export_results(model, cfg: ModelConfig, path: str = None):
             row[str(t)] = imp_qty * imp_price - sale_qty * sale_price
         cost.append(row)
     df_cost = pd.DataFrame(cost)
-    print('!!! ATTENTION !!!')
+    print('\nATTENTION:')
     print('df_cost for things you dont import or export is wrong (e.g. cost from on-site RES)\n'
           'The model prints out as cost, the ELECTRICITY produced by RES * export_price of electricity on the market.\n')
 
@@ -385,9 +385,6 @@ def export_results(model, cfg: ModelConfig, path: str = None):
 
     penalty = cfg.penalty
 
-    print('slackImport ', tot_slack_imp)
-    print('slackExport ', tot_slack_exp)
-    print('penalty ', penalty)
 
     decomp.append({
         "Element": "Slack",
@@ -445,7 +442,7 @@ def export_results(model, cfg: ModelConfig, path: str = None):
                 # 10) Objective function decomposition
                 df_decomp.to_excel(writer, sheet_name="ObjDecomp", index=False)
 
-            print(f"✅ Wrote all sheets to {output.resolve()}")
+            print(f"Saving to {output.resolve()}")
             break
 
         except PermissionError:

@@ -52,19 +52,9 @@ def main():
     solver = SolverFactory('gurobi_persistent')
     solver.set_instance(model)
     solver.options['MIPGap'] = 0.05
-    print("Solving MIP …\n")
-
-
-    mip_start = time.time()
+    print("\nSolving MIP …\n")
     mip_result = solver.solve(model, tee=True)
-    mip_end = time.time()
-    print("MIP solve finished.\n")
-    mip_elapsed = mip_end - mip_start
-    if mip_elapsed < 60:
-        print(f"MIP Solve time: {int(mip_elapsed)} seconds\n")
-    else:
-        mins, secs = divmod(int(mip_elapsed), 60)
-        print(f"MIP Solve time: {mins:02d}:{secs:02d} (mm:ss)\n")
+    print("\nMIP solve finished.\n")
 
     termination = str(mip_result.solver.termination_condition).lower()
     if "infeasible" in termination:
@@ -99,24 +89,15 @@ def main():
 
         # 5) Clear any old duals, then re‐solve as an LP to get duals
         print("Re‐solving as an LP to extract duals …\n")
-        lp_start = time.time()
         model.dual.clear()
         lp_result = solver.solve(model, tee=False)
-        lp_end = time.time()
-        print("LP solve finished.")
-        lp_elapsed = lp_end - lp_start
-        if lp_elapsed < 60:
-            print(f"LP Solve time: {int(lp_elapsed)} seconds\n")
-        else:
-            mins, secs = divmod(int(lp_elapsed), 60)
-            print(f"LP Solve time: {mins:02d}:{secs:02d} (mm:ss)\n")
-        print(f"LP termination condition: {lp_result.solver.termination_condition}\n")
+        print("LP solve finished.\n")
 
     # export_results_to_excel(model)
     print("Exporting results to Excel ...")
     export_results(model, cfg)
     print("Results exported successfully.")
-    debug_objective(model, cfg)
+    # debug_objective(model, cfg)
 
     elapsed = time.time() - start_time
     print("\n==========================")

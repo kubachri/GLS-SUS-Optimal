@@ -9,7 +9,6 @@ def fuelmix_rule(m, g, e, t):
         return Constraint.Skip
     return m.in_frac[g,e] * m.Fuelusetotal[g,t] == m.Fueluse[g,e,t]
 
-
 # 2) Production for each non-storage technology
 def production_rule(m, g, e, t):
     if m.capacity[g] <= 0:
@@ -18,7 +17,6 @@ def production_rule(m, g, e, t):
     if g in m.G_s:
         return Constraint.Skip
     return m.out_frac[g,e] * m.Fuelusetotal[g,t] * m.Fe[g] == m.Generation[g,e,t]
-
 
 # 3) Storage constraints
 def storage_balance_rule(m, g, t):
@@ -31,12 +29,10 @@ def storage_balance_rule(m, g, t):
         if gg==g)
     return m.Volume[g,t] == prev + m.Fuelusetotal[g,t] * m.Fe[g] - discharge
 
-
 def charging_max(m, g, t):
     if g not in m.G_s:
         return Constraint.Skip
     return m.Fuelusetotal[g,t] <= m.capacity[g] * m.Charge[g,t]
-
 
 def discharging_max(m, g, t):
     if g not in m.G_s:
@@ -46,7 +42,6 @@ def discharging_max(m, g, t):
         for (gg,e) in m.f_out
         if gg==g)
     return discharge <= m.capacity[g] * (1-m.Charge[g,t])
-
 
 # def charging_min(m, g, t):
 #     if g not in m.G_s or m.Minimum[g] <=0 :
@@ -63,14 +58,12 @@ def discharging_max(m, g, t):
 #         if gg==g)
 #     return discharge <= m.Minimum[g] * (1-m.Charge[g,t])
 
-
 def volume_upper_rule(m, g, t):
     return m.Volume[g, t] <= m.soc_max[g]
 
 
 def volume_final_soc(m, g):
     return m.Volume[g, m.T.last()] == m.soc_init[g]
-
 
 # 4) Energy balance equations
 def balance_rule(m, a, e, t):
@@ -111,7 +104,6 @@ def balance_rule(m, a, e, t):
     )
     # 4) Assemble the balance
     return buy_term + inflow + generation == fueluse + sale_term + outflow
-
 
 # # 5) Demand constraint based on sales + slack
 def demand_time_rule(m, a, e, t):
@@ -179,7 +171,6 @@ def max_buy_rule(m, e, t):
     rhs = total_cap / len(m.LinesInterconnectors)
     return lhs <= rhs
 
-
 # 7) MaxSale (analogous)
 def max_sale_rule(m, e, t):
     total_cap = sum(
@@ -204,23 +195,13 @@ def availability_rule(m, g, t):
     # total fuel‐use (pre‐efficiency) cannot exceed capacity×profile
     return m.Fuelusetotal[g, t] <= m.capacity[g] * m.Profile[g, t]
 
-
 # 8) Ramp-up: (Generation[t] – Generation[t-1])/Fe ≤ LHS
 def ramp_up_rule(m, g, t):
-    # only where a nonzero RampRate exists
-    if m.RampRate[g] <= 0:
+    # only where a nonzero RampRate exists, and skip the first hour
+    if m.RampRate[g] <= 0 or t == m.T.first():
         return Constraint.Skip
-    # skip the first hour (no t-1)
-    if t == m.T.first():
-        return Constraint.Skip
-    # build left‐hand side exactly as GAMS:
-    # if not UC: just rampRate
-    # if UC: rampRate*Online[t-1] + Minimum*(1-Online[t-1])
     prev_on = m.Online[g, m.T.prev(t)]
-    if g not in m.UC:
-        lhs = m.RampRate[g]
-    else:
-        lhs = m.RampRate[g]*prev_on + m.Minimum[g]*(1-prev_on)
+    lhs = m.RampRate[g]*prev_on + m.Minimum[g]*(1-prev_on)
     # right‐hand side: sum over export‐energies of (Gen[t]–Gen[t-1])/Fe
     rhs = sum(
         (m.Generation[g,e,t] - m.Generation[g,e,m.T.prev(t)])/m.Fe[g]
@@ -229,18 +210,11 @@ def ramp_up_rule(m, g, t):
     )
     return lhs >= rhs
 
-
 # 9) Ramp-down: (Generation[t-1] – Generation[t])/Fe ≤ LHS
 def ramp_down_rule(m, g, t):
-    if m.RampRate[g] <= 0:
+    if m.RampRate[g] <= 0 or t == m.T.first():
         return Constraint.Skip
-    if t == m.T.first():
-        return Constraint.Skip
-    # LHS: if not UC, rampRate; else rampRate*Online[t] + Minimum*(1-Online[t])
-    if g not in m.UC:
-        lhs = m.RampRate[g]
-    else:
-        lhs = m.RampRate[g]*m.Online[g,t] + m.Minimum[g]*(1-m.Online[g,t])
+    lhs = m.RampRate[g]*m.Online[g,t] + m.Minimum[g]*(1-m.Online[g,t])
     # RHS: sum over export‐energies of (Gen[t-1]–Gen[t])/Fe
     rhs = sum(
         (m.Generation[g,e,m.T.prev(t)] - m.Generation[g,e,t]) / m.Fe[g]
@@ -249,20 +223,17 @@ def ramp_down_rule(m, g, t):
     )
     return lhs >= rhs
 
-
 # 10) Capacity constraint: Capacity*Online ≥ FuelUseTotal  (only for UC)
 def capacity_rule(m, g, t):
     if g not in m.UC:
         return Constraint.Skip
     return m.capacity[g] * m.Online[g,t] >= m.Fuelusetotal[g,t]
 
-
 # 11) Minimum-load: FuelUseTotal ≥ Minimum*Online  (only if Minimum>0)
 def minimum_load_rule(m, g, t):
     if g not in m.UC or m.Minimum[g] <= 0:
         return Constraint.Skip
     return m.Fuelusetotal[g,t] >= m.Minimum[g] * m.Online[g,t]
-
 
 # 12) Startup cost: Startcost ≥ StartupCost*(Online[t]–Online[t-1])  (only if cstart>0)
 def startup_cost_rule(m, g, t):

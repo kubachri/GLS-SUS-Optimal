@@ -25,13 +25,11 @@ def scale_tech_parameters(data, tech_df):
     }
 
     # Which technologies have nonzero minimum or ramp?
-    UC = [g for g in tech_df.index if orig_min[g]  > 0]
-    RR = [g for g in tech_df.index if orig_ramp[g] > 0]
+    UC = [g for g in tech_df.index if orig_min[g]  > 0 or orig_ramp[g] > 0]
 
     # Now scale your DataFrame in place…
     for g in UC:
         tech_df.at[g, 'Minimum'] = sum_in_raw[g] * orig_cap[g] * orig_min[g]
-    for g in RR:
         tech_df.at[g, 'RampRate'] = sum_in_raw[g] * orig_cap[g] * orig_ramp[g]
     for g in tech_df.index:
         newc = sum_in_raw[g] * orig_cap[g]
@@ -42,7 +40,6 @@ def scale_tech_parameters(data, tech_df):
 
     # Stick UC, RR and capacity back into your data dict for easy access
     data['UC']       = UC
-    data['RR']       = RR
     data['capacity'] = capacity
     data['original_cap'] = orig_cap
 

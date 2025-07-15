@@ -65,7 +65,6 @@ def define_sets(model, data):
 
     # Unit-commitment and ramp-rate
     model.UC = Set(initialize=data['UC'], within=model.G)
-    model.RR = Set(initialize=data['RR'], within=model.G)
     # Inter-area flow definitions
     model.flowset = Set(
         initialize=data['FlowSet'],

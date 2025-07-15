@@ -198,7 +198,7 @@ def availability_rule(m, g, t):
 # 8) Ramp-up: (Generation[t] – Generation[t-1])/Fe ≤ LHS
 def ramp_up_rule(m, g, t):
     # only where a nonzero RampRate exists, and skip the first hour
-    if m.RampRate[g] <= 0 or t == m.T.first():
+    if g not in m.UC or t == m.T.first():
         return Constraint.Skip
     prev_on = m.Online[g, m.T.prev(t)]
     lhs = m.RampRate[g]*prev_on + m.Minimum[g]*(1-prev_on)
@@ -212,7 +212,7 @@ def ramp_up_rule(m, g, t):
 
 # 9) Ramp-down: (Generation[t-1] – Generation[t])/Fe ≤ LHS
 def ramp_down_rule(m, g, t):
-    if m.RampRate[g] <= 0 or t == m.T.first():
+    if g not in m.UC or t == m.T.first():
         return Constraint.Skip
     lhs = m.RampRate[g]*m.Online[g,t] + m.Minimum[g]*(1-m.Online[g,t])
     # RHS: sum over export‐energies of (Gen[t-1]–Gen[t])/Fe

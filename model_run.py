@@ -1,6 +1,6 @@
 # scripts/run_model.py
 import argparse
-from pyomo.environ import SolverFactory, Suffix, value, Var, Binary
+from pyomo.environ import SolverFactory, Suffix, value, Var, Binary, TransformationFactory, Constraint
 from src.config           import ModelConfig
 from src.model.builder    import build_model
 from src.utils.export_resultT import export_results
@@ -44,9 +44,8 @@ def main():
     model = build_model(cfg)
     print("Model built successfully.\n")
 
-    if model.Demand_Target:
-        # 2) Tell Pyomo we want to import duals (for later LP)
-        model.dual = Suffix(direction=Suffix.IMPORT)
+
+    model.dual = Suffix(direction=Suffix.IMPORT)
 
     # 3) Solve the MIP
     solver = SolverFactory('gurobi_persistent')
@@ -54,6 +53,8 @@ def main():
     solver.options['MIPGap'] = 0.05
     print("\nSolving MIP …\n")
     mip_result = solver.solve(model, tee=True)
+    mip_obj = value(model.Obj)
+    print(f"→ MIP objective (profit) = {mip_obj:,.2f}\n")
     print("\nMIP solve finished.\n")
 
     termination = str(mip_result.solver.termination_condition).lower()
@@ -66,32 +67,32 @@ def main():
     print("Checking constraint violations after MIP solve...")
     detect_max_constraint_violation(model, threshold=1e-4, top_n=10)
 
-    if model.Demand_Target:
+    # After solving the MIP, but before fixing binaries:
+    for v in model.component_data_objects(Var, descend_into=True):
+        if v.domain is Binary and v.value is not None:
+            v.fix(v.value)
 
-        # After solving the MIP, but before fixing binaries:
-        print("Fixing binaries before LP dual extraction ...\n")
+    print("Relaxing integer vars → pure LP …\n")
+    TransformationFactory('core.relax_integer_vars').apply_to(model)
 
-        seen = set()
-        for varobj in model.component_data_objects(Var, descend_into=True):
-            if varobj.domain is Binary and varobj.value is not None:
-                comp_name = varobj.parent_component().name  # e.g. "Charge" or "Online"
-                tech = varobj.index()[0]  # first index = technology name
-                seen.add((comp_name, tech))
+    # 5) Clear any old duals, then re‐solve as an LP to get duals
+    print("Re‐solving as an LP to extract duals …\n")
+    lp_solver = SolverFactory('gurobi')
+    lp_result = lp_solver.solve(model, tee=False, suffixes=['dual'])
+    lp_obj = value(model.Obj)
+    print(f"→ LP objective (continuous, binaries fixed) = {lp_obj:,.2f}\n")
+    print("LP solve finished.\n")
 
-        # Now print one line per (component, tech)
-        for comp_name, tech in sorted(seen):
-            print(f"{comp_name}  →  {tech}")
-
-        # Finally, fix all binaries as before
-        for varobj in model.component_data_objects(Var, descend_into=True):
-            if varobj.domain is Binary and varobj.value is not None:
-                varobj.fix(varobj.value)
-
-        # 5) Clear any old duals, then re‐solve as an LP to get duals
-        print("Re‐solving as an LP to extract duals …\n")
-        model.dual.clear()
-        lp_result = solver.solve(model, tee=False)
-        print("LP solve finished.\n")
+    # 5) Print duals for your CO2 balance constraint
+    #    (replace 'CO2_balance' and index set 'T' with whatever your builder uses)
+    print("CO₂‐balance duals (only for fuel = 'CO2'):")
+    for con in model.component_data_objects(Constraint, active=True):
+        # Filter only the 'Balance' constraint family
+        if con.parent_component().name == "Balance":
+            a, e, t = con.index()        # unpack the (area, energy, time) tuple
+            if e == "CO2":               # only for CO2
+                π = model.dual[con]      # shadow price
+                print(f"  area={a}, time={t}: dual = {π:,.4f}")
 
     # export_results_to_excel(model)
     print("Exporting results to Excel ...")

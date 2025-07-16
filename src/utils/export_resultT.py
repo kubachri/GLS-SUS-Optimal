@@ -268,23 +268,35 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     )
     df_Asum.sort_values(['Result','area'], inplace=True)
 
-    if model.Demand_Target:
-        # --- Duals sheet: 1) hourly CO2, 2) weekly methanol duals ---
-        # 1) Hourly CO2 duals
-        co2_rows = []
-        for t in times:
-            row = {'Time': str(t)}
-            for area in ['Skive']:
-                idx = (area, 'CO2', t)
-                if idx in model.Balance.index_set():
-                    dual_val = model.dual.get(model.Balance[idx], 0.0)
-                else:
-                    dual_val = 0.0
-                row[f"CO2_{area}"] = dual_val
-            co2_rows.append(row)
-        df_co2 = pd.DataFrame(co2_rows)
+    # --- Duals sheet: 1) hourly CO2, 2) weekly methanol duals ---
+    # 1) Hourly CO2 duals
+    co2_rows = []
+    for (area, energy, t) in model.Balance.index_set():
+        if energy == 'CO2':
+            con       = model.Balance[area, energy, t]
+            dual_val  = model.dual.get(con, 0.0)
+            co2_rows.append({
+                'Area':   area,
+                'Energy': energy,
+                'Time':   t,
+                'Dual':   dual_val
+            })
+    df_co2 = pd.DataFrame(co2_rows, columns=['Area','Energy','Time','Dual'])
 
-        # 2) Weekly methanol‐target duals
+    # for t in times:
+    #     row = {'Time': str(t)}
+    #     for area in ['Skive']:
+    #         idx = (area, 'CO2', t)
+    #         if idx in model.Balance.index_set():
+    #             dual_val = model.dual.get(model.Balance[idx], 0.0)
+    #         else:
+    #             dual_val = 0.0
+    #         row[f"CO2_{area}"] = dual_val
+    #     co2_rows.append(row)
+    # df_co2 = pd.DataFrame(co2_rows)
+
+    if model.Demand_Target:
+    # 2) Weekly methanol‐target duals
         meth_rows = []
         for w in sorted(model.W):
             # constraint index is just w
@@ -433,9 +445,9 @@ def export_results(model, cfg: ModelConfig, path: str = None):
                     sheet_name='ResultCsum'
                 )
                 # 9) Duals – hourly and weekly dual values
+                # write hourly CO2 at the top
+                df_co2.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=0)
                 if model.Demand_Target:
-                    # write hourly CO2 at the top
-                    df_co2.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=0)
                     # then leave one blank line and write the weekly table
                     df_meth.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=3)
 

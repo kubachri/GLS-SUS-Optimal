@@ -48,7 +48,7 @@ def define_sets(model, data):
 
     # Sets definition
     model.A = Set(initialize=data['A'])
-    model.G = Set(initialize=data['G'])
+    model.G = Set(initialize=data['G'], ordered=True)
     model.F = Set(initialize=data['F'])
     model.T = Set(initialize=data['T'], ordered=True)
 

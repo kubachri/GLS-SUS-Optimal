@@ -97,12 +97,35 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         varom.append(row)
     df_varom = pd.DataFrame(varom)
 
-    # sort each block by tech → energy
-    for df in (df_op, df_vol, df_cost, df_start, df_varom):
-        df.sort_values(['tech','energy'], inplace=True)
-
     # concatenate all ResultT (hourly)
     df_T = pd.concat([df_op, df_vol, df_cost, df_start, df_varom], ignore_index=True)
+    # --- enforce block‐order on Result *and* tech before sorting ---
+    # 1) Result-block order exactly as in your GAMS Tech.inc export
+    block_order_T = [
+        'Operation',
+        'Volume',
+        'Costs_EUR',
+        'Startcost_EUR',
+        'Variable_OM_cost_EUR'
+    ]
+    df_T['Result'] = pd.Categorical(
+        df_T['Result'],
+        categories=block_order_T,
+        ordered=True
+    )
+
+    # 2) Tech order from model.G (already ordered=True in your sets)
+    tech_order = list(model.G)
+    df_T['tech'] = pd.Categorical(
+        df_T['tech'],
+        categories=tech_order,
+        ordered=True
+    )
+
+    # 3) Now sort once by the two categoricals + energy
+    df_T.sort_values(['Result','tech','energy'], inplace=True)
+
+    # 4) Re‐slice columns so time‐cols remain at the end
     df_T = df_T[['Result','tech','energy'] + time_cols]
 
     # --- build Flows sheet (hourly) ---
@@ -140,6 +163,15 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         categories=block_order_T,
         ordered=True
     )
+
+    # 1) enforce Tech.inc order on the “tech” column
+    tech_order = list(model.G)
+    df_Tsum['tech'] = pd.Categorical(
+        df_Tsum['tech'],
+        categories=tech_order,
+        ordered=True
+    )
+    # 2) now sort by Result (block), then by that tech order
     df_Tsum.sort_values(['Result','tech'], inplace=True)
 
 

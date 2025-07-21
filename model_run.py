@@ -1,6 +1,7 @@
 # scripts/run_model.py
 import argparse
 from pyomo.environ import SolverFactory, Suffix, value, Var, Binary, TransformationFactory, Constraint
+from pyomo.opt import TerminationCondition
 from src.config           import ModelConfig
 from src.model.builder    import build_model
 from src.utils.export_resultT import export_results
@@ -42,27 +43,92 @@ def main():
 
     print("Building Pyomo model ...\n")
     model = build_model(cfg)
-    print("Model built successfully.\n")
+    model.name = 'GreenlabSkive_CK'
+    print(f"Model {model.name} built successfully.\n")
 
+    print("=== Carrier‐mix fractions (in_frac) ===")
+    model.in_frac.pprint()      # shows each (g,e) → fraction :contentReference[oaicite:0]{index=0}
+
+    print("\n=== Carrier‐mix fractions (out_frac) ===")
+    model.out_frac.pprint()     # shows each (g,e) → fraction :contentReference[oaicite:1]{index=1}
 
     model.dual = Suffix(direction=Suffix.IMPORT)
 
     # 3) Solve the MIP
     solver = SolverFactory('gurobi_persistent')
-    solver.set_instance(model)
+    solver.set_instance(model, symbolic_solver_labels=True)
     solver.options['MIPGap'] = 0.05
     print("\nSolving MIP …\n")
     mip_result = solver.solve(model, tee=True)
-    mip_obj = value(model.Obj)
-    print(f"→ MIP objective (profit) = {mip_obj:,.2f}\n")
+    term = mip_result.solver.termination_condition
+    print(f"\n→ Initial termination condition: {term}")
     print("\nMIP solve finished.\n")
 
-    termination = str(mip_result.solver.termination_condition).lower()
-    if "infeasible" in termination:
-        print("\nModel reported infeasible. Attempting IIS extraction...\n")
-        from src.utils.infeasibilities import compute_gurobi_iis
-        compute_gurobi_iis(model, solver)
-        return  # Stop further pipeline execution if infeasible
+    # Handle the ambiguous case and retry
+    if term == TerminationCondition.infeasibleOrUnbounded:
+        print("⚠ Ambiguous (INF_OR_UNBD). Retrying with DualReductions=0 …")
+        solver.options['DualReductions'] = 0
+        solver.reset()                    # clear the persistent state
+        retry_result = solver.solve(model, tee=True)
+        term = retry_result.solver.termination_condition
+        print(f"→ New termination condition: {term}")
+
+    # Now term is either INFEASIBLE, UNBOUNDED, or OPTIMAL/OTHER
+    if term == TerminationCondition.infeasible:
+        print("✘ Model is infeasible. Extracting IIS …")
+        grb = solver._solver_model
+        grb.computeIIS()
+        grb.write("model.ilp.iis")
+        print(" → IIS written to model.ilp.iis.")
+    elif term == TerminationCondition.unbounded:
+        print("⚠ MIP is unbounded (with integer vars).  → Relaxing integrality to extract a ray…")
+
+        # --- 1) Rebuild the model (fresh copy) ---
+        lp_model = build_model(cfg)
+        lp_model.name = model.name + "_LPrelaxed"
+
+        # --- 2) Relax all integer (incl. binary) variables to continuous ---
+        TransformationFactory('core.relax_integer_vars').apply_to(lp_model)
+
+        # --- 3) Set solver options for “true” unbounded diagnosis ---
+        lp_solver = SolverFactory('gurobi_persistent')
+        lp_solver.set_instance(lp_model, symbolic_solver_labels=True)
+        lp_solver.options['DualReductions'] = 0   # force a clean unbounded vs infeasible test
+        lp_solver.options['InfUnbdInfo']   = 1   # request the ray
+
+        # --- 4) Solve the continuous LP ---
+        lp_result = lp_solver.solve(tee=True)
+        lp_term   = lp_result.solver.termination_condition
+        print(f"→ LP relaxation termination: {lp_term}")
+
+        if lp_term == TerminationCondition.unbounded:
+            grb_lp   = lp_solver._solver_model
+            ray_coef = grb_lp.UnbdRay
+            vars_lp  = grb_lp.getVars()
+
+            # Invert Pyomo's internal map
+            inv_map = {
+                solver_var: pyomo_var
+                for pyomo_var, solver_var in lp_solver._pyomo_var_to_solver_var_map.items()
+            }
+
+            print("\nNon-zero components of the unbounded ray (var : direction) and their Pyomo names:")
+            for solver_var, coeff in zip(vars_lp, ray_coef):
+                if abs(coeff) < 1e-8:
+                    continue
+
+                pyomo_var = inv_map.get(solver_var, None)
+                print(f"  {solver_var.VarName:30s} : {coeff: .6e}"
+                    f"   → Pyomo: {pyomo_var.name if pyomo_var is not None else '??'}")
+        return
+    elif term == TerminationCondition.optimal:
+        print("✔ Model solved to optimality.\n")
+    else:
+        return (f"‼️ Unexpected termination condition: {term}")
+    
+    # Now you know you have a valid solution
+    mip_obj = value(model.Obj)
+    print(f"✔ MIP objective (profit) = {mip_obj:,.2f}")
 
     print("Checking constraint violations after MIP solve...")
     detect_max_constraint_violation(model, threshold=1e-4, top_n=10)
@@ -82,6 +148,41 @@ def main():
     lp_obj = value(model.Obj)
     print(f"→ LP objective (continuous, binaries fixed) = {lp_obj:,.2f}\n")
     print("LP solve finished.\n")
+
+    print("Hourly CO₂-balance breakdown for Skive and DK1:")
+    print(" Area | Time |   Buy   |  Inflow | Generation | Fueluse |  Sale  | Outflow |   LHS   |   RHS   | Imbalance | Dual ")
+    print("-----------------------------------------------------------------------------------------------------------")
+    for area in ['Skive','DK1']:
+        for t in model.T:
+            # 1) Buy/Sale
+            buy_term  = value(model.Buy[area,'CO2',t])  if (area,'CO2') in model.buyE  else 0.0
+            sale_term = value(model.Sale[area,'CO2',t]) if (area,'CO2') in model.saleE else 0.0
+
+            # 2) Inflow / Outflow
+            inflow  = sum(value(model.Flow[i, area, 'CO2', t])
+                          for (i,j,e) in model.flowset if j==area and e=='CO2')
+            outflow = sum(value(model.Flow[area, j, 'CO2', t])
+                          for (i,j,e) in model.flowset if i==area and e=='CO2')
+
+            # 3) Local gen / fuel use
+            techs = [g for (a,g) in model.location if a==area]
+            generation = sum(value(model.Generation[g,'CO2',t]) for g in techs if (g,'CO2') in model.f_out)
+            fueluse    = sum(value(model.Fueluse[g,'CO2',t])    for g in techs if (g,'CO2') in model.f_in)
+
+            # 4) Balance check
+            lhs       = buy_term + inflow + generation
+            rhs       = fueluse + sale_term + outflow
+            imbalance = lhs - rhs
+
+            # 5) Dual of the CO2-balance constraint
+            con   = model.Balance[area, 'CO2', t]
+            dualₚ = model.dual[con]
+
+            # Print nicely
+            print(f"{area:5} | {t:4} | {buy_term:7.2f} | {inflow:7.2f} | {generation:10.2f} |"
+                  f" {fueluse:7.2f} | {sale_term:6.2f} | {outflow:7.2f} |"
+                  f" {lhs:7.2f} | {rhs:7.2f} | {imbalance:9.2e} | {dualₚ:6.2f}")
+
 
     # 5) Print duals for your CO2 balance constraint
     #    (replace 'CO2_balance' and index set 'T' with whatever your builder uses)

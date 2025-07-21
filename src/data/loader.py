@@ -70,24 +70,62 @@ def load_carriermix():
     with open(path, encoding='utf-8') as f:
         lines = f.readlines()
 
-    header_idx = next(i for i, L in enumerate(lines) if "Import." in L and "Export." in L)
-    end_idx    = next((i for i in range(header_idx+1, len(lines)) if not lines[i].strip()), len(lines))
+    # find header and end
+    header_idx = next(i for i, L in enumerate(lines) 
+                      if "Import." in L and "Export." in L)
+    end_idx = next((i for i in range(header_idx+1, len(lines)) 
+                    if not lines[i].strip()), len(lines))
 
+    # grab the raw header line
     header_line = lines[header_idx].rstrip("\n")
-    cols        = header_line.split()
-    starts      = [header_line.index(c) for c in cols] + [len(header_line)]
+
+    # --- NEW: find every run of non-whitespace and its start position ---
+    matches = list(re.finditer(r'\S+', header_line))
+    cols    = [m.group() for m in matches]
+    starts  = [m.start()    for m in matches] + [len(header_line)]
 
     techs, data_rows = [], []
     for raw in lines[header_idx+1 : end_idx]:
-        if not raw.strip(): continue
+        if not raw.strip():
+            continue
+        # tech name is everything to the first column start
         techs.append(raw[:starts[0]].strip())
         row = []
         for j in range(len(cols)):
             piece = raw[starts[j] : starts[j+1]].strip()
-            row.append(0.0 if piece=="" else float(piece))
+            row.append(0.0 if piece == "" else float(piece))
         data_rows.append(row)
 
     return pd.DataFrame(data_rows, index=techs, columns=cols)
+
+# def load_carriermix():
+#     """
+#     Parse CarrierMix.inc into a DataFrame.
+#     Header has tokens like 'Import.Electricity', 'Export.Hydrogen', etc.
+#     Rows give fractions for each technology.
+#     """
+#     path = os.path.join(INC_DIR, "CarrierMix.inc")
+#     with open(path, encoding='utf-8') as f:
+#         lines = f.readlines()
+
+#     header_idx = next(i for i, L in enumerate(lines) if "Import." in L and "Export." in L)
+#     end_idx    = next((i for i in range(header_idx+1, len(lines)) if not lines[i].strip()), len(lines))
+
+#     header_line = lines[header_idx].rstrip("\n")
+#     cols        = header_line.split()
+#     starts      = [header_line.index(c) for c in cols] + [len(header_line)]
+
+#     techs, data_rows = [], []
+#     for raw in lines[header_idx+1 : end_idx]:
+#         if not raw.strip(): continue
+#         techs.append(raw[:starts[0]].strip())
+#         row = []
+#         for j in range(len(cols)):
+#             piece = raw[starts[j] : starts[j+1]].strip()
+#             row.append(0.0 if piece=="" else float(piece))
+#         data_rows.append(row)
+
+#     return pd.DataFrame(data_rows, index=techs, columns=cols)
 
 
 def load_flowset():

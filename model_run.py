@@ -46,12 +46,6 @@ def main():
     model.name = 'GreenlabSkive_CK'
     print(f"Model {model.name} built successfully.\n")
 
-    print("=== Carrier‐mix fractions (in_frac) ===")
-    model.in_frac.pprint()      # shows each (g,e) → fraction :contentReference[oaicite:0]{index=0}
-
-    print("\n=== Carrier‐mix fractions (out_frac) ===")
-    model.out_frac.pprint()     # shows each (g,e) → fraction :contentReference[oaicite:1]{index=1}
-
     model.dual = Suffix(direction=Suffix.IMPORT)
 
     # 3) Solve the MIP
@@ -149,51 +143,51 @@ def main():
     print(f"→ LP objective (continuous, binaries fixed) = {lp_obj:,.2f}\n")
     print("LP solve finished.\n")
 
-    print("Hourly CO₂-balance breakdown for Skive and DK1:")
-    print(" Area | Time |   Buy   |  Inflow | Generation | Fueluse |  Sale  | Outflow |   LHS   |   RHS   | Imbalance | Dual ")
-    print("-----------------------------------------------------------------------------------------------------------")
-    for area in ['Skive','DK1']:
-        for t in model.T:
-            # 1) Buy/Sale
-            buy_term  = value(model.Buy[area,'CO2',t])  if (area,'CO2') in model.buyE  else 0.0
-            sale_term = value(model.Sale[area,'CO2',t]) if (area,'CO2') in model.saleE else 0.0
+    # print("Hourly CO₂-balance breakdown for Skive and DK1:")
+    # print(" Area | Time |   Buy   |  Inflow | Generation | Fueluse |  Sale  | Outflow |   LHS   |   RHS   | Imbalance | Dual ")
+    # print("-----------------------------------------------------------------------------------------------------------")
+    # for area in ['Skive','DK1']:
+    #     for t in model.T:
+    #         # 1) Buy/Sale
+    #         buy_term  = value(model.Buy[area,'CO2',t])  if (area,'CO2') in model.buyE  else 0.0
+    #         sale_term = value(model.Sale[area,'CO2',t]) if (area,'CO2') in model.saleE else 0.0
 
-            # 2) Inflow / Outflow
-            inflow  = sum(value(model.Flow[i, area, 'CO2', t])
-                          for (i,j,e) in model.flowset if j==area and e=='CO2')
-            outflow = sum(value(model.Flow[area, j, 'CO2', t])
-                          for (i,j,e) in model.flowset if i==area and e=='CO2')
+    #         # 2) Inflow / Outflow
+    #         inflow  = sum(value(model.Flow[i, area, 'CO2', t])
+    #                       for (i,j,e) in model.flowset if j==area and e=='CO2')
+    #         outflow = sum(value(model.Flow[area, j, 'CO2', t])
+    #                       for (i,j,e) in model.flowset if i==area and e=='CO2')
 
-            # 3) Local gen / fuel use
-            techs = [g for (a,g) in model.location if a==area]
-            generation = sum(value(model.Generation[g,'CO2',t]) for g in techs if (g,'CO2') in model.f_out)
-            fueluse    = sum(value(model.Fueluse[g,'CO2',t])    for g in techs if (g,'CO2') in model.f_in)
+    #         # 3) Local gen / fuel use
+    #         techs = [g for (a,g) in model.location if a==area]
+    #         generation = sum(value(model.Generation[g,'CO2',t]) for g in techs if (g,'CO2') in model.f_out)
+    #         fueluse    = sum(value(model.Fueluse[g,'CO2',t])    for g in techs if (g,'CO2') in model.f_in)
 
-            # 4) Balance check
-            lhs       = buy_term + inflow + generation
-            rhs       = fueluse + sale_term + outflow
-            imbalance = lhs - rhs
+    #         # 4) Balance check
+    #         lhs       = buy_term + inflow + generation
+    #         rhs       = fueluse + sale_term + outflow
+    #         imbalance = lhs - rhs
 
-            # 5) Dual of the CO2-balance constraint
-            con   = model.Balance[area, 'CO2', t]
-            dualₚ = model.dual[con]
+    #         # 5) Dual of the CO2-balance constraint
+    #         con   = model.Balance[area, 'CO2', t]
+    #         dualₚ = model.dual[con]
 
-            # Print nicely
-            print(f"{area:5} | {t:4} | {buy_term:7.2f} | {inflow:7.2f} | {generation:10.2f} |"
-                  f" {fueluse:7.2f} | {sale_term:6.2f} | {outflow:7.2f} |"
-                  f" {lhs:7.2f} | {rhs:7.2f} | {imbalance:9.2e} | {dualₚ:6.2f}")
+    #         # Print nicely
+    #         print(f"{area:5} | {t:4} | {buy_term:7.2f} | {inflow:7.2f} | {generation:10.2f} |"
+    #               f" {fueluse:7.2f} | {sale_term:6.2f} | {outflow:7.2f} |"
+    #               f" {lhs:7.2f} | {rhs:7.2f} | {imbalance:9.2e} | {dualₚ:6.2f}")
 
 
-    # 5) Print duals for your CO2 balance constraint
-    #    (replace 'CO2_balance' and index set 'T' with whatever your builder uses)
-    print("CO₂‐balance duals (only for fuel = 'CO2'):")
-    for con in model.component_data_objects(Constraint, active=True):
-        # Filter only the 'Balance' constraint family
-        if con.parent_component().name == "Balance":
-            a, e, t = con.index()        # unpack the (area, energy, time) tuple
-            if e == "CO2":               # only for CO2
-                π = model.dual[con]      # shadow price
-                print(f"  area={a}, time={t}: dual = {π:,.4f}")
+    # # 5) Print duals for your CO2 balance constraint
+    # #    (replace 'CO2_balance' and index set 'T' with whatever your builder uses)
+    # print("CO₂‐balance duals (only for fuel = 'CO2'):")
+    # for con in model.component_data_objects(Constraint, active=True):
+    #     # Filter only the 'Balance' constraint family
+    #     if con.parent_component().name == "Balance":
+    #         a, e, t = con.index()        # unpack the (area, energy, time) tuple
+    #         if e == "CO2":               # only for CO2
+    #             π = model.dual[con]      # shadow price
+    #             print(f"  area={a}, time={t}: dual = {π:,.4f}")
 
     # export_results_to_excel(model)
     print("Exporting results to Excel ...")

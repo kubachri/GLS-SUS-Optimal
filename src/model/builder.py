@@ -2,7 +2,7 @@
 
 from pyomo.environ import ConcreteModel
 from src.config import ModelConfig
-from src.data.loader import load_data, load_techdata
+from src.data.loader import load_data
 from src.data.preprocess import scale_tech_parameters, slice_time_series
 from src.model.sets import define_sets
 from src.model.parameters import define_params
@@ -26,8 +26,7 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
         The constructed and fully specified Pyomo optimization model.
     """
     # 1) Load raw data
-    data    = load_data(cfg)
-    tech_df = load_techdata()
+    data, tech_df = load_data(cfg)
 
     # 2) Preprocess technology parameters (scaling capacity, minima, ramp rates)
     data, tech_df = scale_tech_parameters(data, tech_df)

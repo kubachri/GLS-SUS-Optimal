@@ -132,17 +132,9 @@ def load_data(cfg):
     tech_df = tech_df[tech_df['tech'].isin(techs)].set_index('tech')
     tech_df = tech_df.infer_objects(copy=False).fillna(0)
 
-    # 7) Build each parameter dict, casting to float
-    capacity      = tech_df['Capacity'].astype(float).to_dict()
-    Minimum       = tech_df['Minimum'].astype(float).to_dict()
-    RampRate      = tech_df['RampRate'].astype(float).to_dict()
-    StorageCap    = tech_df['StorageCap'].astype(float).to_dict()
-    InitialVolume = tech_df['InitialVolume'].astype(float).to_dict()
-    Cvar          = tech_df['VariableOmcost'].astype(float).to_dict()
-    Cstart        = tech_df['StartupCost'].astype(float).to_dict()
-
     # 8) Identify your storage technologies G_s
-    G_s = [t for t, cap in StorageCap.items() if cap > 0]
+    G_s = tech_df.index[tech_df['StorageCap'] > 0].tolist()
+    print(G_s)
 
     # -----------------------
     # 6) PROFILE & time-index T
@@ -280,9 +272,6 @@ def load_data(cfg):
         'F':            fuels,
         'G_s':          G_s,
         'T':            T,
-        'capacity':     capacity,
-        'Cvar':         Cvar,
-        'Cstart':       Cstart,
         'sigma_in':     sigma_in,
         'sigma_out':    sigma_out,
         'Profile':      Profile,

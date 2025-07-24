@@ -1,410 +1,303 @@
 # src/data/loader.py
 
 import os
-import re
 import pandas as pd
 import numpy as np
 
-# Will be set at runtime by load_data(cfg)
-INC_DIR = None
-
-
-def read_set(name):
-    """
-    Read a GAMS set from <INC_DIR>/<name>.inc of the form
-        Set name / A1 A2 A3 … / ;
-    and return a Python list of the elements.
-    """
-    path = os.path.join(INC_DIR, f"{name}.inc")
-    text = open(path, encoding='utf-8').read()
-    m = re.search(r"/\s*(.+?)\s*/", text, re.DOTALL)
-    if not m:
-        raise ValueError(f"Could not parse set {name}.inc")
-    return [tok for tok in re.split(r"[,\s]+", m.group(1).strip()) if tok]
-
-
-def load_areas():
-    """Wrapper around read_set for the Area set."""
-    return read_set("Area")
-
-
-def load_techdata():
-    """
-    Parse Techdata.inc into a pandas.DataFrame.
-    Header line starts with 'Minimum' and columns are whitespace‐separated tokens.
-    Data rows follow until the first blank line. Index = technology names.
-    """
-    path = os.path.join(INC_DIR, "Techdata.inc")
-    with open(path, encoding='utf-8') as f:
-        lines = f.readlines()
-
-    header_idx = next(i for i, L in enumerate(lines) if L.strip().startswith("Minimum"))
-    end_idx = next((i for i in range(header_idx+1, len(lines)) if not lines[i].strip()), len(lines))
-
-    header_line = lines[header_idx].rstrip("\n")
-    cols = header_line.split()
-    starts = [header_line.index(c) for c in cols] + [len(header_line)]
-
-    techs, data_rows = [], []
-    for raw in lines[header_idx+1 : end_idx]:
-        if not raw.strip():
-            continue
-        techs.append(raw[:starts[0]].strip())
-        row = [
-            np.nan if raw[starts[j]:starts[j+1]].strip()=="" else float(raw[starts[j]:starts[j+1]].strip())
-            for j in range(len(cols))
-        ]
-        data_rows.append(row)
-
-    df = pd.DataFrame(data_rows, index=techs, columns=cols)
-    return df.fillna(0.0)
-
-
-def load_carriermix():
-    """
-    Parse CarrierMix.inc into a DataFrame.
-    Header has tokens like 'Import.Electricity', 'Export.Hydrogen', etc.
-    Rows give fractions for each technology.
-    """
-    path = os.path.join(INC_DIR, "CarrierMix.inc")
-    with open(path, encoding='utf-8') as f:
-        lines = f.readlines()
-
-    # find header and end
-    header_idx = next(i for i, L in enumerate(lines) 
-                      if "Import." in L and "Export." in L)
-    end_idx = next((i for i in range(header_idx+1, len(lines)) 
-                    if not lines[i].strip()), len(lines))
-
-    # grab the raw header line
-    header_line = lines[header_idx].rstrip("\n")
-
-    # --- NEW: find every run of non-whitespace and its start position ---
-    matches = list(re.finditer(r'\S+', header_line))
-    cols    = [m.group() for m in matches]
-    starts  = [m.start()    for m in matches] + [len(header_line)]
-
-    techs, data_rows = [], []
-    for raw in lines[header_idx+1 : end_idx]:
-        if not raw.strip():
-            continue
-        # tech name is everything to the first column start
-        techs.append(raw[:starts[0]].strip())
-        row = []
-        for j in range(len(cols)):
-            piece = raw[starts[j] : starts[j+1]].strip()
-            row.append(0.0 if piece == "" else float(piece))
-        data_rows.append(row)
-
-    return pd.DataFrame(data_rows, index=techs, columns=cols)
-
-# def load_carriermix():
-#     """
-#     Parse CarrierMix.inc into a DataFrame.
-#     Header has tokens like 'Import.Electricity', 'Export.Hydrogen', etc.
-#     Rows give fractions for each technology.
-#     """
-#     path = os.path.join(INC_DIR, "CarrierMix.inc")
-#     with open(path, encoding='utf-8') as f:
-#         lines = f.readlines()
-
-#     header_idx = next(i for i, L in enumerate(lines) if "Import." in L and "Export." in L)
-#     end_idx    = next((i for i in range(header_idx+1, len(lines)) if not lines[i].strip()), len(lines))
-
-#     header_line = lines[header_idx].rstrip("\n")
-#     cols        = header_line.split()
-#     starts      = [header_line.index(c) for c in cols] + [len(header_line)]
-
-#     techs, data_rows = [], []
-#     for raw in lines[header_idx+1 : end_idx]:
-#         if not raw.strip(): continue
-#         techs.append(raw[:starts[0]].strip())
-#         row = []
-#         for j in range(len(cols)):
-#             piece = raw[starts[j] : starts[j+1]].strip()
-#             row.append(0.0 if piece=="" else float(piece))
-#         data_rows.append(row)
-
-#     return pd.DataFrame(data_rows, index=techs, columns=cols)
-
-
-def load_flowset():
-    """
-    Parse Flowset.inc → list of (area_from, area_to, energy) triples.
-    """
-    path = os.path.join(INC_DIR, "Flowset.inc")
-    lines = open(path, encoding='utf-8').read().splitlines()
-
-    boundaries = [i for i,L in enumerate(lines) if L.strip().startswith("/")]
-    if len(boundaries) < 2:
-        raise RuntimeError("Could not locate / … / block in Flowset.inc")
-    start, end = boundaries[0]+1, boundaries[1]
-
-    flowset = []
-    for raw in lines[start:end]:
-        if not raw.strip(): continue
-        parts = raw.split()
-        toks = [p for p in parts if p != "."]
-        flowset.append(tuple(toks[:3]))
-
-    return flowset
-
-
-def load_demand():
-    """
-    Parse Demand.inc into a pandas.DataFrame (Area.Energy columns, Hour-* index).
-    Blanks become 0.0 floats.
-    """
-    path = os.path.join(INC_DIR, "Demand.inc")
-    with open(path, encoding='utf-8') as f:
-        lines = f.readlines()
-
-    header_idx = next(i for i, L in enumerate(lines) if not L.lstrip().startswith("*") and "DK1." in L)
-    header_line = lines[header_idx].rstrip("\n")
-    columns     = header_line.strip().split()
-    col_starts  = [header_line.index(col) for col in columns] + [len(header_line)]
-
-    times, matrix = [], []
-    for raw in lines[header_idx+1:]:
-        if not raw.strip(): break
-        times.append(raw[:col_starts[0]].strip())
-        row = [
-            0.0 if raw[col_starts[j]:col_starts[j+1]].strip()=="" else float(raw[col_starts[j]:col_starts[j+1]].strip())
-            for j in range(len(columns))
-        ]
-        matrix.append(row)
-
-    return pd.DataFrame(matrix, index=times, columns=columns)
-
-
-def load_interconnector_capacity():
-    """
-    Parse InterconnectorCapacity.inc into a pandas.DataFrame.
-    Index = Hour-*, Columns = Area.Energy
-    """
-    path = os.path.join(INC_DIR, "InterconnectorCapacity.inc")
-    with open(path, encoding='utf-8') as f:
-        lines = f.read().splitlines()
-
-    header_idx = next(i for i, L in enumerate(lines) if not L.lstrip().startswith("*") and re.search(r"\w+\.\w+", L))
-    header_line = lines[header_idx].rstrip("\n")
-    cols        = header_line.strip().split()
-    starts      = [header_line.index(c) for c in cols] + [len(header_line)]
-
-    times, data_rows = [], []
-    for raw in lines[header_idx+1:]:
-        if not raw.strip() or raw.strip().startswith("/"): break
-        times.append(raw[:starts[0]].strip())
-        row = []
-        for j in range(len(cols)):
-            piece = raw[starts[j]:starts[j+1]].strip()
-            row.append(0.0 if piece=="" else float(piece))
-        data_rows.append(row)
-
-    return pd.DataFrame(data_rows, index=times, columns=cols)
-
-
-def load_location_entries():
-    """
-    Read Location.inc and return list of (area, tech) tuples.
-    """
-    path = os.path.join(INC_DIR, "Location.inc")
-    lines = open(path, encoding='utf-8').read().splitlines()
-
-    start = next(i for i, L in enumerate(lines) if L.strip() == "/")
-    end   = next(i for i in range(start+1, len(lines)) if lines[i].strip().startswith("/"))
-
-    entries = []
-    for raw in lines[start+1:end]:
-        parts = raw.split()
-        if len(parts) >= 3 and parts[1] == ".":
-            entries.append((parts[0], parts[2]))
-    return entries
-
-
-def load_price():
-    """
-    Parse Price.inc → DataFrame of import/export prices.
-    """
-    path = os.path.join(INC_DIR, "Price.inc")
-    with open(path, encoding='utf-8') as f:
-        lines = f.readlines()
-
-    header_idx = next(i for i, L in enumerate(lines) if not L.lstrip().startswith("*") and "Import" in L and "Export" in L)
-    header_line = lines[header_idx].rstrip("\n")
-    cols        = header_line.strip().split()
-    starts      = [header_line.index(c) for c in cols] + [len(header_line)]
-
-    times, matrix = [], []
-    for raw in lines[header_idx+1:]:
-        if not raw.strip(): break
-        times.append(raw[:starts[0]].strip())
-        row = [
-            0.0 if raw[starts[j]:starts[j+1]].strip()=="" else float(raw[starts[j]:starts[j+1]].strip())
-            for j in range(len(cols))
-        ]
-        matrix.append(row)
-
-    return pd.DataFrame(matrix, index=times, columns=cols)
-
-
-def load_profile():
-    """
-    Parse Profile.inc → DataFrame indexed by Hour-*, columns = each tech.
-    Handles wrapped rows via stitching, and computes true column spans
-    via regex rather than header.index().
-    """
-    path = os.path.join(INC_DIR, "Profile.inc")
-    with open(path, encoding='utf-8') as f:
-        lines = f.readlines()
-
-    # 1) Find header line
-    hdr = next(i for i, L in enumerate(lines)
-               if L.strip() and not L.lstrip().startswith("*") and not L.lstrip().startswith("Table"))
-    header_line = lines[hdr].rstrip("\n")
-
-    # 2) Build cols + exact start/end spans via regex
-    matches = list(re.finditer(r"\S+", header_line))
-    cols   = [m.group() for m in matches]
-    starts = [m.start() for m in matches]
-    ends   = [m.end()   for m in matches] + [len(header_line)]
-
-    # 3) Stitch wrapped rows
-    times          = []
-    data_str_rows  = []
-    current_time   = None
-    current_buffer = ""
-
-    for raw in lines[hdr+1:]:
-        if not raw.strip() or raw.lstrip().startswith("*") or raw.strip().startswith("/"):
-            break
-
-        prefix = raw[:starts[0]]
-        rest   = raw[starts[0]:].rstrip("\n")
-
-        if prefix.strip():
-            # new logical row
-            if current_time is not None:
-                data_str_rows.append(current_buffer)
-            current_time   = prefix.strip()
-            times.append(current_time)
-            current_buffer = rest
-        else:
-            # continuation
-            current_buffer += rest
-
-    # append last
-    if current_time is not None:
-        data_str_rows.append(current_buffer)
-
-    # 4) Slice each logical row into floats
-    data_rows = []
-    for row_str in data_str_rows:
-        row = []
-        for j in range(len(cols)):
-            cell = row_str[starts[j]-starts[0] : ends[j]-starts[0]].strip()
-            row.append(0.0 if cell == "" else float(cell))
-        data_rows.append(row)
-
-    return pd.DataFrame(data_rows, index=times, columns=cols)
-
-def load_units():
-    """
-    Parse Units.inc into a Python list of names.
-    """
-    path = os.path.join(INC_DIR, "Units.inc")
-    text = open(path, encoding='utf-8').read()
-    m = re.search(r"/\s*(.+?)\s*/", text, re.DOTALL)
-    if not m:
-        raise ValueError("Could not parse Units.inc")
-    return [tok for tok in re.split(r"[,\s]+", m.group(1).strip()) if tok]
-
-
 def load_data(cfg):
     """
-    Glue together all loads into the dict expected by the model.
-    First sets INC_DIR based on cfg.data_dir.
+    Load all data for the Pyomo model from a single Excel workbook
+    NewDataFormat.xlsx located at the project root.
+    Returns the same `data` dict shape as before.
     """
-    global INC_DIR
-    INC_DIR = cfg.data_dir
-    if not os.path.isdir(INC_DIR):
-        raise FileNotFoundError(f"Could not find data folder: {INC_DIR}")
+    # Path to the Excel file (assumed in project root)
+    excel_path = os.path.join(os.getcwd(), "NewDataFormat.xlsx")
+    if not os.path.isfile(excel_path):
+        raise FileNotFoundError(f"Could not find Excel data file: {excel_path}")
 
-    data = {}
-    # sets
-    data['A']       = load_areas()
-    data['T']       = read_set("Time")
-    data['FlowSet'] = load_flowset()
+    # Load all sheets
+    xls = pd.ExcelFile(excel_path)
+    sheets = {name: xls.parse(name) for name in xls.sheet_names}
 
-    # location mapping
-    data['location'] = load_location_entries()
+    # -----------------------
+    # 1) TECHNOLOGIES (G)
+    # -----------------------
+    # TechsIncluded: no header, names in col A
+    # Read the TechsIncluded sheet without treating any row as header
+    techs_included = xls.parse('TechsIncluded', header=None)
+    # Now column 0 is truly all your tech names, starting with the very first row
+    techs = techs_included[0].dropna().astype(str).tolist()
 
-    # tech & fuels
-    tech_df = load_techdata()
-    cm_df   = load_carriermix()
-    data['G']   = list(tech_df.index)
-    data['F']   = sorted({c.split('.',1)[1] for c in cm_df.columns})
-    data['G_s'] = [g for g in data['G'] if "Storage" in g]
+    # -----------------------
+    # 2) LOCATION (area, tech)
+    # -----------------------
+    loc_df = sheets['Location'].astype(str).dropna(how='all')
+    location = list(loc_df.itertuples(index=False, name=None))
 
-    # time-series
-    prof_df = load_profile()
-    data['Profile'] = {
-        (tech, time): float(prof_df.at[time, tech])
-        for tech in prof_df.columns
-        for time in prof_df.index
+    # -----------------------
+    # 3) FLOWSET (area_from, area_to, fuel)
+    # -----------------------
+    flow_df = sheets['Flowset'].astype(str).dropna(how='all')
+    flowset = list(flow_df.itertuples(index=False, name=None))
+
+    # Derive A = all unique areas seen in Flowset
+    areas = sorted(
+        set(flow_df['AreaFrom']).union(flow_df['AreaTo'])
+    )
+
+
+    # 4) CARRIER MIX (sigma_in, sigma_out)
+    # ------------------------------------
+    # 1) Load raw sheet with no header inference
+    cm_raw = xls.parse('Carriermix', header=None)
+
+    # 2) Row index 3 (4th Excel row) has the true column labels
+    raw_header = cm_raw.iloc[3].fillna('').astype(str).tolist()
+    raw_header[0] = 'tech'    # rename the blank first column
+
+    # 3) Data starts at row index 4
+    cm_data = cm_raw.iloc[4:].copy()
+    cm_data.columns = raw_header
+
+    # 4) Keep only the rows for your selected techs
+    cm_data = cm_data[cm_data['tech'].isin(techs)]
+
+    # 5) Identify which Import/Export cols actually have data
+    import_cols = [
+        col for col in cm_data.columns
+        if col.startswith('Import.') 
+        and cm_data[col].notna().any() 
+        and (cm_data[col] != 0).any()
+    ]
+    export_cols = [
+        col for col in cm_data.columns
+        if col.startswith('Export.') 
+        and cm_data[col].notna().any() 
+        and (cm_data[col] != 0).any()
+    ]
+
+    # 6) Build dictionaries, filtering out any NaN or zero on the fly
+    sigma_in = {
+        (row.tech, col.split('.',1)[1]): float(v)
+        for _, row in cm_data.iterrows()
+        for col in import_cols
+        for v in [row[col]]
+        if pd.notna(v) and v != 0
     }
 
-    dem_df = load_demand()
-    data['Demand'] = {
-        (area, fuel, t): float(dem_df.at[t, col])
-        for col in dem_df.columns
-        for (area, fuel) in [col.split('.',1)]
-        for t in dem_df.index
+    sigma_out = {
+        (row.tech, col.split('.',1)[1]): float(v)
+        for _, row in cm_data.iterrows()
+        for col in export_cols
+        for v in [row[col]]
+        if pd.notna(v) and v != 0
     }
 
-    price_df = load_price()
-    data['price_buy'], data['price_sell'] = {}, {}
-    for col in price_df.columns:
-        area, energy, direction = col.split('.',2)
-        for t in price_df.index:
-            price = float(price_df.at[t, col])
+    # Derive F = fuels that have any non-zero import/export for included techs
+    fuels = sorted({
+        fuel
+        for (t,fuel), v in {**sigma_in, **sigma_out}.items()
+        if v != 0
+    })
+
+
+
+    # -----------------------
+    # 5) TECHDATA (tech parameters)
+    # -----------------------
+    
+    # 1) Read the sheet with no header inference
+    td_raw = xls.parse('Techdata', header=None)
+
+    # 2) Drop any fully blank rows and reset the index
+    td_raw = td_raw.dropna(how='all').reset_index(drop=True)
+
+    # 3) Auto-detect which row is the real header:
+    #    Look for the first row that contains the string "Capacity"
+    header_idx = next(
+        i for i, row in td_raw.iterrows()
+        if row.astype(str).str.contains('Capacity', case=False).any()
+    )
+
+    # 4) Extract and clean the header names
+    headers = td_raw.iloc[header_idx].fillna('').astype(str).tolist()
+    # The first cell in that row is blank—rename it "tech"
+    headers[0] = 'tech'
+
+    # 5) Slice off the header+meta rows, assign our cleaned headers
+    tech_df = td_raw.iloc[header_idx+1 :].copy()
+    tech_df.columns = headers
+
+    # 6) Keep only the rows whose "tech" is in your TechsIncluded list
+    tech_df = tech_df[tech_df['tech'].isin(techs)].set_index('tech')
+
+    # 7) Build each parameter dict, casting to float
+    capacity      = tech_df['Capacity'].astype(float).to_dict()
+    Minimum       = tech_df['Minimum'].astype(float).to_dict()
+    RampRate      = tech_df['RampRate'].astype(float).to_dict()
+    StorageCap    = tech_df['StorageCap'].astype(float).to_dict()
+    InitialVolume = tech_df['InitialVolume'].astype(float).to_dict()
+    Cvar          = tech_df['VariableOmcost'].astype(float).to_dict()
+    Cstart        = tech_df['StartupCost'].astype(float).to_dict()
+
+    # 8) Identify your storage technologies G_s
+    G_s = [t for t, cap in StorageCap.items() if cap > 0]
+
+    # -----------------------
+    # 6) PROFILE & time-index T
+    # -----------------------
+
+    # 1) Read the Profile sheet, using the first row as header
+    prof_df = xls.parse('Profile', header=0)
+
+    # 2) Make sure the first column is named “Hour”
+    prof_df = prof_df.rename(columns={prof_df.columns[0]: 'Hour'})
+
+    # 3) Extract your time‐index in sheet order
+    T = prof_df['Hour'].astype(str).tolist()
+
+    # pick only the columns for the included technologies
+    tech_cols = [c for c in prof_df.columns[1:] if c in techs]
+    prof_df = prof_df[['Hour'] + tech_cols]
+
+    # build Profile only over those
+    Profile = {
+        (tech, hr): float(row[tech])
+        for _, row in prof_df.iterrows()
+        for tech in tech_cols
+        for hr in [row['Hour']]
+    }
+
+
+    
+    # -----------------------
+    # 7) DEMAND (area.energy × time)
+    # -----------------------
+
+    # Parse with header=3 to use the 4th row as column names and drop the top 3 metadata rows
+    dem_df = xls.parse('Demand', header=3).dropna(how='all')
+
+    # Rename first column to "Hour"
+    dem_df.rename(columns={dem_df.columns[0]:'Hour'}, inplace=True)
+
+    # 2) Pick only the columns whose fuel is in your fuels list
+    demand_cols = [col for col in dem_df.columns[1:]
+               if col.split('.',1)[1] in fuels]
+
+    # 3) Slice to smaller DF
+    dem_df = dem_df[['Hour'] + demand_cols]
+
+    # Now exactly like Profile: build (area, energy, hr) → value
+    Demand = {
+        (area, energy, hr): float(row[col])
+        for _, row in dem_df.iterrows()
+        for col in demand_cols
+        for area, energy in [col.split('.',1)]
+        if pd.notna(row[col])
+        for hr in [row['Hour']]
+    }
+
+
+    # -----------------------
+    # 8) PRICE (import/export)
+    # -----------------------
+
+    # 1) Read so that the 10th Excel row (index 9) is your header
+    pr_df = xls.parse('Price', header=9) \
+            .dropna(how='all') \
+            .reset_index(drop=True)
+
+    # 2) Keep only the real time‐rows (Hour starts with “T”)
+    pr_df = pr_df[pr_df['Hour'].astype(str).str.startswith('T')]
+
+    # 3) Pick only the columns whose energy is in our fuels list
+    price_cols = [
+        col for col in pr_df.columns[1:]
+        if isinstance(col, str) and col.split('.')[1] in fuels
+    ]
+
+    # 4) Slice to a smaller DataFrame you can inspect easily
+    pr_df = pr_df[['Hour'] + price_cols]
+
+    # 5) Build price_buy / price_sell dicts from that filtered frame
+    price_buy  = {}
+    price_sell = {}
+
+    for _, row in pr_df.iterrows():
+        hr = row['Hour']
+        for col in price_cols:
+            area, energy, direction = col.split('.', 2)
+            val = row[col]
+            if pd.isna(val):
+                continue
+            key = (area, energy, hr)
             if direction == 'Import':
-                data['price_buy'][(area, energy, t)] = price
+                price_buy[key]  = float(val)
             else:
-                data['price_sell'][(area, energy, t)] = price
+                price_sell[key] = float(val)
 
-    ic_df = load_interconnector_capacity()
-    data['Xcap'] = {
-        (area, energy, t): float(ic_df.at[t, col])
-        for col in ic_df.columns
-        for (area, energy) in [col.split('.',1)]
-        for t in ic_df.index
+    # -----------------------
+    # 9) INTERCONNECTOR CAPACITY
+    # -----------------------
+    # 1) Read so that the 4th Excel row (index 3) is your header
+    ic_df = xls.parse('InterconnectorCapacity', header=3) \
+            .dropna(how='all') \
+            .reset_index(drop=True)
+
+    # 2) Make sure the first column is named “Hour”
+    ic_df.rename(columns={ic_df.columns[0]: 'Hour'}, inplace=True)
+
+    # 3) Pick only the columns whose energy is in our fuels list
+    ic_cols = [
+        col for col in ic_df.columns[1:]
+        if col.split('.',1)[1] in fuels
+    ]
+
+    # 4) Slice to a smaller DataFrame for inspection
+    ic_df = ic_df[['Hour'] + ic_cols]
+
+    # 5) Build Xcap dict from that filtered frame
+    Xcap = {
+        (area, energy, hr): float(row[col])
+        for _, row in ic_df.iterrows()
+        for col in ic_cols
+        for area, energy in [col.split('.',1)]
+        if pd.notna(row[col])
+        for hr in [row['Hour']]
+    }
+    
+    location = [(a,t) for (a,t) in location if t in techs]
+    print('original flowset: ', flowset)
+    print('fuels: ', fuels)
+    flowset = [(a1,a2,f) for (a1,a2,f) in flowset if f in fuels]
+    print('final flowset ', flowset)
+
+    # -----------------------
+    # Assemble and return
+    # -----------------------
+    data = {
+        'G':            techs,
+        'A':            areas,
+        'F':            fuels,
+        'G_s':          G_s,
+        'T':            T,
+        'capacity':     capacity,
+        'Cvar':         Cvar,
+        'Cstart':       Cstart,
+        'sigma_in':     sigma_in,
+        'sigma_out':    sigma_out,
+        'Profile':      Profile,
+        'Demand':       Demand,
+        'price_buy':    price_buy,
+        'price_sell':   price_sell,
+        'Xcap':         Xcap,
+        'FlowSet':      flowset,
+        'location':     location
     }
 
-    # techno-economic
-    data['capacity'] = tech_df['Capacity'].to_dict()
-    data['Cvar']     = tech_df['VariableOmcost'].to_dict()
-    data['Cstart']   = tech_df['StartupCost'].to_dict()
+    for k in data.keys():
+        print(f'Data of {k}:\\{data[k]}\n')
 
-    # carrier-mix
-    sig_in, sig_out = {}, {}
-    for tech in cm_df.index:
-        for fuel in data['F']:
-            imp = f"Import.{fuel}"
-            exp = f"Export.{fuel}"
-            sig_in[(tech, fuel)]  = cm_df.at[tech, imp] if imp in cm_df.columns else 0.0
-            sig_out[(tech, fuel)] = cm_df.at[tech, exp] if exp in cm_df.columns else 0.0
-    data['sigma_in'], data['sigma_out'] = sig_in, sig_out
+    breakpoint()
 
-    # SOC init/max from tech_df
-    data['SOC_init'] = {g: tech_df.at[g, 'InitialVolume'] for g in data['G_s']}
-    data['SOC_max']  = {g: tech_df.at[g, 'StorageCap']     for g in data['G_s']}
-
-    # units & storage fuel mapping
-    data['Units'] = load_units()
-    data['storage_fuel'] = {
-        g: next(f for f in data['F'] if sig_in.get((g,f),0)+sig_out.get((g,f),0)>0)
-        for g in data['G_s']
-    }
-
-    return data
+    return data, tech_df

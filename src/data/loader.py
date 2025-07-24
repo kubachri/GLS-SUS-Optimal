@@ -130,6 +130,7 @@ def load_data(cfg):
 
     # 6) Keep only the rows whose "tech" is in your TechsIncluded list
     tech_df = tech_df[tech_df['tech'].isin(techs)].set_index('tech')
+    tech_df = tech_df.infer_objects(copy=False).fillna(0)
 
     # 7) Build each parameter dict, casting to float
     capacity      = tech_df['Capacity'].astype(float).to_dict()

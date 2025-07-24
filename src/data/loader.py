@@ -267,10 +267,8 @@ def load_data(cfg):
     }
     
     location = [(a,t) for (a,t) in location if t in techs]
-    print('original flowset: ', flowset)
-    print('fuels: ', fuels)
+
     flowset = [(a1,a2,f) for (a1,a2,f) in flowset if f in fuels]
-    print('final flowset ', flowset)
 
     # -----------------------
     # Assemble and return
@@ -294,10 +292,5 @@ def load_data(cfg):
         'FlowSet':      flowset,
         'location':     location
     }
-
-    for k in data.keys():
-        print(f'Data of {k}:\\{data[k]}\n')
-
-    breakpoint()
 
     return data, tech_df

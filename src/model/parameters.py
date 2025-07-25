@@ -10,17 +10,11 @@ def define_params(model, data, tech_df):
      - Fe, in_frac, out_frac
     """
     # Unpack raw data
-    G           = data['G']
-    T_all       = data['T']
     sigma_in    = data['sigma_in'].copy()
     sigma_out   = data['sigma_out'].copy()
     G_s         = data['G_s']
-    location    = data['location']
-    F           = data['F']
-    flowset     = data['FlowSet']
-    A           = data['A']
-    capacity = data['capacity']
-    original_capacity = data['original_cap']
+    capacity = tech_df['Capacity'].astype(float).to_dict()
+    original_capacity = capacity
 
     # 2) Efficiency Fe per tech
     Fe = {}
@@ -46,12 +40,12 @@ def define_params(model, data, tech_df):
     soc_max  = {g: tech_df.at[g, 'StorageCap']     for g in G_s}
 
     # 5) Cost & startup data
-    cvar   = data['Cvar']
-    cstart = data['Cstart']
+    cvar   = tech_df['VariableOmcost'].astype(float).to_dict()
+    cstart = tech_df['StartupCost'].astype(float).to_dict()
 
     # 6) Ramping & minimum
-    RampRate = tech_df['RampRate'].to_dict()
-    Minimum  = tech_df['Minimum' ].to_dict()
+    RampRate = tech_df['RampRate'].astype(float).to_dict()
+    Minimum  = tech_df['Minimum'].astype(float).to_dict()
 
     # 7) Time‐series & interconnector capacities
     profile     = data['Profile']

@@ -131,6 +131,7 @@ def load_data(cfg):
     # 6) Keep only the rows whose "tech" is in your TechsIncluded list
     tech_df = tech_df[tech_df['tech'].isin(techs)].set_index('tech')
     tech_df = tech_df.infer_objects(copy=False).fillna(0)
+    tech_df = tech_df.infer_objects(copy=False).fillna(0)
 
     # 8) Identify your storage technologies G_s
     G_s = tech_df.index[tech_df['StorageCap'] > 0].tolist()

@@ -13,6 +13,7 @@ import time
 from datetime import datetime, timedelta
 from src.utils.max_contraint_violation import detect_max_constraint_violation
 import pandas as pd
+from src.utils.export_inputs import export_inputs
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -194,6 +195,8 @@ def main():
     export_results(model, cfg)
     print("Results exported successfully.")
     # debug_objective(model, cfg)
+
+    export_inputs(model, cfg)
 
     elapsed = time.time() - start_time
     print("\n==========================")

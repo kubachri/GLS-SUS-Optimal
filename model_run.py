@@ -202,5 +202,7 @@ def main():
     elapsed_td = timedelta(seconds=int(elapsed))
     print(f"Total runtime: {elapsed_td}")
 
+    return model
+
 if __name__ == '__main__':
-    main()
+    model = main()

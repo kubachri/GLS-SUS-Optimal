@@ -13,8 +13,8 @@ def define_params(model, data, tech_df):
     sigma_in    = data['sigma_in'].copy()
     sigma_out   = data['sigma_out'].copy()
     G_s         = data['G_s']
-    capacity = tech_df['Capacity'].astype(float).to_dict()
-    original_capacity = capacity
+    capacity = data['capacity']
+    original_capacity = data['original_cap']
 
     # 2) Efficiency Fe per tech
     Fe = {}

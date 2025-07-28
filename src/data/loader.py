@@ -236,6 +236,10 @@ def load_data(cfg):
         (area, energy, time): (price + 0.198*cfg.carbon_tax if energy == "NatGas" else price)
         for (area, energy, time), price in price_buy.items()
     }
+    price_sell = {
+        (area, energy, time): (cfg.carbon_tax if energy == "CO2Comp" else price)
+        for (area, energy, time), price in price_sell.items()
+    }
 
     # -----------------------
     # 9) INTERCONNECTOR CAPACITY

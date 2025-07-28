@@ -13,7 +13,10 @@ def export_inputs(model, cfg, path: str = None):
     # 1) Determine output path
     if path is None:
         project_root = Path(__file__).parents[2]
-        out = project_root / "results" / "Inputs.xlsx"
+        filename = "Inputs.xlsx"
+        if cfg.test_mode:
+            filename = "test_" + filename
+        out = project_root / "results" / filename
     else:
         out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)

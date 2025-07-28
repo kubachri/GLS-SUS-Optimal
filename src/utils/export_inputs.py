@@ -22,6 +22,8 @@ def export_inputs(model, cfg, path: str = None):
 
     writer = pd.ExcelWriter(out, engine='xlsxwriter')
 
+    sheet_data = {}
+
     # Export all Sets to a single sheet, side-by-side
     set_dfs = []
     set_names = []
@@ -53,7 +55,8 @@ def export_inputs(model, cfg, path: str = None):
         combined = pd.concat([combined, spacer, df], axis=1)
 
     # Write to single sheet "Sets"
-    combined.to_excel(writer, sheet_name="Sets", index=False)
+    # combined.to_excel(writer, sheet_name="Sets", index=False)
+    sheet_data["Sets"] = combined
 
     tech_params = {
     "capacity", "original_capacity", "Fe", "soc_init",
@@ -94,7 +97,9 @@ def export_inputs(model, cfg, path: str = None):
             df_pivot.reset_index(inplace=True)
             df_pivot.rename(columns={"Time": "Hour"}, inplace=True)
             short_name = pname if len(pname) <= 25 else pname[:25]
-            df_pivot.to_excel(writer, sheet_name=f"{short_name}", index=False)
+            # df_pivot.to_excel(writer, sheet_name=f"{short_name}", index=False)
+            sheet_data[f"{short_name}"] = df_pivot
+
             continue
 
         if pname == "Profile":
@@ -104,7 +109,8 @@ def export_inputs(model, cfg, path: str = None):
             df_pivot.reset_index(inplace=True)
             df_pivot.rename(columns={"Time": "Hour"}, inplace=True)
             short_name = pname if len(pname) <= 25 else pname[:25]
-            df_pivot.to_excel(writer, sheet_name=f"{short_name}", index=False)
+            # df_pivot.to_excel(writer, sheet_name=f"{short_name}", index=False)
+            sheet_data[f"{short_name}"] = df_pivot
             continue
 
         if pname in {"in_frac", "out_frac"}:
@@ -113,17 +119,35 @@ def export_inputs(model, cfg, path: str = None):
             df_pivot = df.pivot(index="Tech", columns="Fuel", values=pname)
             df_pivot.reset_index(inplace=True)
             short_name = pname if len(pname) <= 25 else pname[:25]
-            df_pivot.to_excel(writer, sheet_name=f"{short_name}_pivoted", index=False)
+            # df_pivot.to_excel(writer, sheet_name=f"{short_name}_pivoted", index=False)
+            sheet_data[f"{short_name}"] = df_pivot
             continue
-        
+
         # Generic param export
         num_idx = len(rows[0]) - 1
         col_names = [f"{pname}_idx{i+1}" for i in range(num_idx)] + [pname]
         df = pd.DataFrame(rows, columns=col_names)
-        df.to_excel(writer, sheet_name=f"Param__{pname}", index=False)
+        # df.to_excel(writer, sheet_name=f"Param__{pname}", index=False)
+        sheet_data[f"Param__{pname}"] = df
 
     if "Tech" in tech_df:
-        tech_df["Tech"].to_excel(writer, sheet_name="tech_df", index=False)
+        # tech_df["Tech"].to_excel(writer, sheet_name="tech_df", index=False)
+        sheet_data["tech_df"] = tech_df["Tech"]
+
+    # Write in the specified order
+    sheet_order = [
+        "Sets", "tech_df", "in_frac_pivoted", "out_frac_pivoted", "Profile",
+        "demand", "price_buy", "price_sale", "InterconnectorCapacity"
+    ]
+    for sheet in sheet_order:
+        if sheet in sheet_data:
+            sheet_data[sheet].to_excel(writer, sheet_name=sheet, index=False)
+
+    # Write all remaining sheets not in the priority list
+    for sheet, df in sheet_data.items():
+        if sheet not in sheet_order:
+            df.to_excel(writer, sheet_name=sheet, index=False)
 
     writer.close()
+
     print(f"✔ All inputs exported to {out}")

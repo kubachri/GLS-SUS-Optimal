@@ -33,6 +33,8 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     default.parent.mkdir(parents=True, exist_ok=True)
 
     base, suffix, folder = default.stem, default.suffix, default.parent
+    if cfg.test_mode:
+        base = "test_" + base
 
     # 2) Common time index
     times = list(model.T)

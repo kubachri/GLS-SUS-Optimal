@@ -226,6 +226,16 @@ def load_data(cfg):
                 price_buy[key]  = float(val)
             else:
                 price_sell[key] = float(val)
+    # Apply carbon tax to electricity imports (120 gCO2eq/kWh in 2024)
+    price_buy = {
+        (area, energy, time): (price + 0.12*cfg.carbon_tax if energy == "Electricity" else price)
+        for (area, energy, time), price in price_buy.items()
+    }
+    # Apply carbon tax to NG imports (198 kgCO2eq/MWh)
+    price_buy = {
+        (area, energy, time): (price + 0.198*cfg.carbon_tax if energy == "NatGas" else price)
+        for (area, energy, time), price in price_buy.items()
+    }
 
     # -----------------------
     # 9) INTERCONNECTOR CAPACITY

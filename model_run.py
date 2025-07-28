@@ -22,6 +22,7 @@ def parse_args():
     p.add_argument('--penalty', type=float, help="penalty multiplier for slack in objective")
     p.add_argument('--data', type=str, help = "name of the folder under project root to use for 'inc_data_*'")
     p.add_argument('--demand-target', type=lambda x: x.lower() == 'true', help="choose whether to enforce methanol annual demand target")
+    p.add_argument('--carbon_tax', type=int, help="set the carbon tax for emissions")
     return p.parse_args()
 
 def main():
@@ -39,7 +40,8 @@ def main():
         n_test=args.n_test if args.n_test is not None else defaults.n_test,
         penalty=args.penalty if args.penalty is not None else defaults.penalty,
         data=args.data if args.data is not None else defaults.data,
-        demand_target=args.demand_target if args.demand_target is not None else defaults.demand_target
+        demand_target=args.demand_target if args.demand_target is not None else defaults.demand_target,
+        carbon_tax=args.carbon_tax if args.carbon_tax is not None else defaults.carbon_tax
     )
 
     print("Building Pyomo model ...\n")

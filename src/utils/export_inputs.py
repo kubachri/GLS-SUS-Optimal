@@ -97,7 +97,6 @@ def export_inputs(model, cfg, path: str = None):
             df_pivot.reset_index(inplace=True)
             df_pivot.rename(columns={"Time": "Hour"}, inplace=True)
             short_name = pname if len(pname) <= 25 else pname[:25]
-            # df_pivot.to_excel(writer, sheet_name=f"{short_name}", index=False)
             sheet_data[f"{short_name}"] = df_pivot
 
             continue
@@ -109,7 +108,6 @@ def export_inputs(model, cfg, path: str = None):
             df_pivot.reset_index(inplace=True)
             df_pivot.rename(columns={"Time": "Hour"}, inplace=True)
             short_name = pname if len(pname) <= 25 else pname[:25]
-            # df_pivot.to_excel(writer, sheet_name=f"{short_name}", index=False)
             sheet_data[f"{short_name}"] = df_pivot
             continue
 
@@ -119,7 +117,6 @@ def export_inputs(model, cfg, path: str = None):
             df_pivot = df.pivot(index="Tech", columns="Fuel", values=pname)
             df_pivot.reset_index(inplace=True)
             short_name = pname if len(pname) <= 25 else pname[:25]
-            # df_pivot.to_excel(writer, sheet_name=f"{short_name}_pivoted", index=False)
             sheet_data[f"{short_name}"] = df_pivot
             continue
 
@@ -127,7 +124,6 @@ def export_inputs(model, cfg, path: str = None):
         num_idx = len(rows[0]) - 1
         col_names = [f"{pname}_idx{i+1}" for i in range(num_idx)] + [pname]
         df = pd.DataFrame(rows, columns=col_names)
-        # df.to_excel(writer, sheet_name=f"Param__{pname}", index=False)
         sheet_data[f"Param__{pname}"] = df
 
     if "Tech" in tech_df:
@@ -136,7 +132,7 @@ def export_inputs(model, cfg, path: str = None):
 
     # Write in the specified order
     sheet_order = [
-        "Sets", "tech_df", "in_frac_pivoted", "out_frac_pivoted", "Profile",
+        "Sets", "tech_df", "in_frac", "out_frac", "Profile",
         "demand", "price_buy", "price_sale", "InterconnectorCapacity"
     ]
     for sheet in sheet_order:

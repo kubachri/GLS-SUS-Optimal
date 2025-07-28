@@ -22,7 +22,10 @@ def export_inputs(model, cfg, path: str = None):
 
     writer = pd.ExcelWriter(out, engine='xlsxwriter')
 
-    # Export Sets
+    # Export all Sets to a single sheet, side-by-side
+    set_dfs = []
+    set_names = []
+
     for s in model.component_objects(Set, descend_into=True):
         rows = [(member if isinstance(member, tuple) else (member,)) for member in s]
         if not rows:
@@ -30,8 +33,33 @@ def export_inputs(model, cfg, path: str = None):
         dim = len(rows[0])
         col_names = [f"{s.name}_idx{i+1}" for i in range(dim)]
         df = pd.DataFrame(rows, columns=col_names)
-        df.to_excel(writer, sheet_name=f"Set__{s.name}", index=False)
+        set_dfs.append(df)
+        set_names.append(s.name)
 
+    # Concatenate all set DataFrames with spacing columns in between
+    from itertools import zip_longest
+
+    max_rows = max(df.shape[0] for df in set_dfs)
+    padded_dfs = []
+
+    for df in set_dfs:
+        padded = df.reindex(range(max_rows))  # pad shorter DataFrames
+        padded_dfs.append(padded)
+
+    # Add 1 blank column between each
+    combined = padded_dfs[0]
+    for df in padded_dfs[1:]:
+        spacer = pd.DataFrame([""] * max_rows, columns=[""])
+        combined = pd.concat([combined, spacer, df], axis=1)
+
+    # Write to single sheet "Sets"
+    combined.to_excel(writer, sheet_name="Sets", index=False)
+
+    tech_params = {
+    "capacity", "original_capacity", "Fe", "soc_init",
+    "soc_max", "cstart", "cvar", "RampRate", "Minimum"
+    }
+    tech_df = {}
     # Export Params
     for p in model.component_objects(Param, descend_into=True):
         pname = p.name
@@ -49,6 +77,14 @@ def export_inputs(model, cfg, path: str = None):
         if not rows:
             continue
 
+        if pname in tech_params:
+            df = pd.DataFrame(rows, columns=["Tech", pname])
+            if "Tech" in tech_df:
+                tech_df["Tech"] = pd.merge(tech_df["Tech"], df, on="Tech", how="outer")
+            else:
+                tech_df["Tech"] = df
+            continue
+
         # Special reshape for price_buy / price_sale
         if pname in {"price_buy", "price_sale", "InterconnectorCapacity", "demand"}:
             df = pd.DataFrame(rows, columns=["Area", "Fuel", "Time", pname])
@@ -58,14 +94,36 @@ def export_inputs(model, cfg, path: str = None):
             df_pivot.reset_index(inplace=True)
             df_pivot.rename(columns={"Time": "Hour"}, inplace=True)
             short_name = pname if len(pname) <= 25 else pname[:25]
-            df_pivot.to_excel(writer, sheet_name=f"{short_name}_pivoted", index=False)
+            df_pivot.to_excel(writer, sheet_name=f"{short_name}", index=False)
             continue
 
+        if pname == "Profile":
+            df = pd.DataFrame(rows, columns=["Tech", "Time", pname])
+            df = df[df[pname].notna()]  # ✅ include zero values, exclude only NaN
+            df_pivot = df.pivot(index="Time", columns="Tech", values=pname)
+            df_pivot.reset_index(inplace=True)
+            df_pivot.rename(columns={"Time": "Hour"}, inplace=True)
+            short_name = pname if len(pname) <= 25 else pname[:25]
+            df_pivot.to_excel(writer, sheet_name=f"{short_name}", index=False)
+            continue
+
+        if pname in {"in_frac", "out_frac"}:
+            df = pd.DataFrame(rows, columns=["Tech", "Fuel", pname])
+            df = df[df[pname].notna()]
+            df_pivot = df.pivot(index="Tech", columns="Fuel", values=pname)
+            df_pivot.reset_index(inplace=True)
+            short_name = pname if len(pname) <= 25 else pname[:25]
+            df_pivot.to_excel(writer, sheet_name=f"{short_name}_pivoted", index=False)
+            continue
+        
         # Generic param export
         num_idx = len(rows[0]) - 1
         col_names = [f"{pname}_idx{i+1}" for i in range(num_idx)] + [pname]
         df = pd.DataFrame(rows, columns=col_names)
         df.to_excel(writer, sheet_name=f"Param__{pname}", index=False)
+
+    if "Tech" in tech_df:
+        tech_df["Tech"].to_excel(writer, sheet_name="tech_df", index=False)
 
     writer.close()
     print(f"✔ All inputs exported to {out}")

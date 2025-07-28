@@ -10,7 +10,6 @@ def export_inputs(model, cfg, path: str = None):
     """
     Export all Sets and Params of `model` into an Excel workbook.
     """
-    # 1) Determine output path
     if path is None:
         project_root = Path(__file__).parents[2]
         filename = "Inputs.xlsx"
@@ -23,58 +22,50 @@ def export_inputs(model, cfg, path: str = None):
 
     writer = pd.ExcelWriter(out, engine='xlsxwriter')
 
-    # 2) Export every Set
+    # Export Sets
     for s in model.component_objects(Set, descend_into=True):
-        # 1) build a list of rows, each row is a tuple of indices
-        rows = []
-        for member in s:
-            # make everything a tuple, even if singleton
-            tup = member if isinstance(member, tuple) else (member,)
-            rows.append(tup)
-
+        rows = [(member if isinstance(member, tuple) else (member,)) for member in s]
         if not rows:
-            # empty set? skip it (or create an empty DataFrame if you prefer)
             continue
-
-        # 2) figure out how many dims this Set has
         dim = len(rows[0])
-
-        # 3) make column names like MySet_idx1, MySet_idx2, …
         col_names = [f"{s.name}_idx{i+1}" for i in range(dim)]
-
-        # 4) create the DataFrame with the right shape
         df = pd.DataFrame(rows, columns=col_names)
+        df.to_excel(writer, sheet_name=f"Set__{s.name}", index=False)
 
-        # 5) write to Excel (one sheet per Set)
-        sheet = f"Set__{s.name}"
-        df.to_excel(writer, sheet_name=sheet, index=False)
-
-    # 3) Export every Param
+    # Export Params
     for p in model.component_objects(Param, descend_into=True):
+        pname = p.name
         rows = []
-        for idx in p.index_set():
-            # normalize idx to a tuple
+
+        # ✅ Only iterate over defined keys
+        for idx in p:
             idx_tup = idx if isinstance(idx, tuple) else (idx,)
             try:
                 v = value(p[idx_tup])
-            except ValueError:
-                # undefined param entry → mark as NaN
+            except:
                 v = np.nan
             rows.append(idx_tup + (v,))
 
         if not rows:
-            # nothing to write for this Param
             continue
 
-        # infer how many idx dimensions we have:
+        # Special reshape for price_buy / price_sale
+        if pname in {"price_buy", "price_sale", "InterconnectorCapacity", "demand"}:
+            df = pd.DataFrame(rows, columns=["Area", "Fuel", "Time", pname])
+            df = df[df[pname].notna() & (df[pname] != 0)]  # ✅ filter only defined nonzero
+            df["Area.Fuel"] = df["Area"] + "." + df["Fuel"]
+            df_pivot = df.pivot(index="Time", columns="Area.Fuel", values=pname)
+            df_pivot.reset_index(inplace=True)
+            df_pivot.rename(columns={"Time": "Hour"}, inplace=True)
+            short_name = pname if len(pname) <= 25 else pname[:25]
+            df_pivot.to_excel(writer, sheet_name=f"{short_name}_pivoted", index=False)
+            continue
+
+        # Generic param export
         num_idx = len(rows[0]) - 1
-
-        # build exactly num_idx names plus the value column
-        col_names = [f"{p.name}_idx{i+1}" for i in range(num_idx)] + [p.name]
-
+        col_names = [f"{pname}_idx{i+1}" for i in range(num_idx)] + [pname]
         df = pd.DataFrame(rows, columns=col_names)
-        sheet = f"Param__{p.name}"
-        df.to_excel(writer, sheet_name=sheet, index=False)
+        df.to_excel(writer, sheet_name=f"Param__{pname}", index=False)
 
     writer.close()
     print(f"✔ All inputs exported to {out}")

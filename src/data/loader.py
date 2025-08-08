@@ -3,6 +3,7 @@
 import os
 import pandas as pd
 import numpy as np
+from src.data.sensitivity import apply_sensitivity_overrides
 
 def load_data(cfg):
     """
@@ -295,4 +296,7 @@ def load_data(cfg):
         'location':     location
     }
 
+    if cfg.sensitivity:
+        tech_df, data = apply_sensitivity_overrides(tech_df, data)
+        
     return data, tech_df

@@ -10,6 +10,7 @@ class ModelConfig:
     data:           str     = 'inc_data'  # name of folder under project root
     demand_target:  bool    = False
     carbon_tax:     int     = 150
+    sensitivity:    bool    = False
 
     @property
     def data_dir(self) -> str:

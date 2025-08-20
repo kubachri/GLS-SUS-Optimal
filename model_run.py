@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from src.utils.max_contraint_violation import detect_max_constraint_violation
 import pandas as pd
 from src.utils.export_inputs import export_inputs
+from dataclasses import asdict
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -47,6 +48,11 @@ def main():
     )
 
     print("Building Pyomo model ...\n")
+    print("Config values:")
+    for key, option in asdict(cfg).items():
+        if key == "n_test" and not cfg.test_mode:
+            continue
+        print(f"{key}: {option}")
     model = build_model(cfg)
     model.name = 'GreenlabSkive_CK'
     print(f"Model {model.name} built successfully.\n")

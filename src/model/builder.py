@@ -35,7 +35,7 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
     if cfg.test_mode:
         data = slice_time_series(data, cfg.n_test)
 
-    print("All data loaded.\n")
+    print("\nAll data loaded.\n")
 
     # 4) Assemble the model
     model = ConcreteModel()

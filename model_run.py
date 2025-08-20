@@ -135,7 +135,7 @@ def main():
     mip_obj = value(model.Obj)
     print(f"✔ MIP objective (profit) = {mip_obj:,.2f}")
 
-    print("Checking constraint violations after MIP solve...")
+    print("\nChecking constraint violations after MIP solve...")
     detect_max_constraint_violation(model, threshold=1e-4, top_n=10)
 
     # After solving the MIP, but before fixing binaries:
@@ -143,7 +143,7 @@ def main():
         if v.domain is Binary and v.value is not None:
             v.fix(v.value)
 
-    print("Relaxing integer vars → pure LP …\n")
+    print("\nRelaxing integer vars → pure LP …\n")
     TransformationFactory('core.relax_integer_vars').apply_to(model)
 
     # 5) Clear any old duals, then re‐solve as an LP to get duals
@@ -201,19 +201,18 @@ def main():
     #             print(f"  area={a}, time={t}: dual = {π:,.4f}")
 
     # export_results_to_excel(model)
-    print("Exporting results to Excel ...")
+    print("Exporting to Excel ... ")
     export_results(model, cfg)
-    print("Results exported successfully.")
-    # debug_objective(model, cfg)
-
     export_inputs(model, cfg)
-
+    # debug_objective(model, cfg)
+    
     elapsed = time.time() - start_time
     print("\n==========================")
     print("Pyomo Model Run Completed")
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     elapsed_td = timedelta(seconds=int(elapsed))
     print(f"Total runtime: {elapsed_td}")
+    print("==========================")
 
     return model
 

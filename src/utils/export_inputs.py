@@ -146,4 +146,5 @@ def export_inputs(model, cfg, path: str = None):
 
     writer.close()
 
-    print(f"✔ All inputs exported to {out}")
+    print("Input data exported successfully.")
+    print(f"File: {out}")

@@ -25,8 +25,8 @@ def detect_max_constraint_violation(model, threshold=1e-6, top_n=5):
     violations.sort(reverse=True)
 
     if violations:
-        print(f"\nDetected {len(violations)} constraints exceeding {threshold} tolerance:")
+        print(f"Detected {len(violations)} constraints exceeding {threshold} tolerance:")
         for v, name, lb, val, ub in violations[:top_n]:
             print(f"Violation: {v:.3e} | Constraint: {name} | Lower: {lb} | Value: {val} | Upper: {ub}")
     else:
-        print(f"\nNo constraint violations exceeding {threshold} tolerance detected.\n")
+        print(f"No constraint violations exceeding {threshold} tolerance detected.")

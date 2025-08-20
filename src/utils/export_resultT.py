@@ -77,9 +77,9 @@ def export_results(model, cfg: ModelConfig, path: str = None):
             row[str(t)] = imp_qty * imp_price - sale_qty * sale_price
         cost.append(row)
     df_cost = pd.DataFrame(cost)
-    print('\nATTENTION:')
-    print('df_cost for things you dont import or export is wrong (e.g. cost from on-site RES)\n'
-          'The model prints out as cost, the ELECTRICITY produced by RES * export_price of electricity on the market.\n')
+    # print('\nATTENTION:')
+    # print('df_cost for things you dont import or export is wrong (e.g. cost from on-site RES)\n'
+    #       'The model prints out as cost, the ELECTRICITY produced by RES * export_price of electricity on the market.\n')
 
     # 3d) Startcost_EUR
     start = []
@@ -488,7 +488,6 @@ def export_results(model, cfg: ModelConfig, path: str = None):
                 # 10) Objective function decomposition
                 df_decomp.to_excel(writer, sheet_name="ObjDecomp", index=False)
 
-            print(f"Saving to {output.resolve()}")
             break
 
         except PermissionError:
@@ -497,6 +496,8 @@ def export_results(model, cfg: ModelConfig, path: str = None):
                 raise RuntimeError("Could not write after 100 attempts")
             print(f"⚠️  {output.name} is in use—trying {base}({i}){suffix}")
 
-
+    
+    print("Results exported successfully.")
+    print(f"File: {output.resolve()}")
 
 

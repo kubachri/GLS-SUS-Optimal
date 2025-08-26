@@ -483,7 +483,7 @@ def export_results(model, cfg: ModelConfig, path: str = None):
                 df_co2.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=0)
                 if model.Demand_Target:
                     # then leave one blank line and write the weekly table
-                    df_meth.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=3)
+                    df_meth.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=5)
 
                 # 10) Objective function decomposition
                 df_decomp.to_excel(writer, sheet_name="ObjDecomp", index=False)

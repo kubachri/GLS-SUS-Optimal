@@ -133,7 +133,7 @@ def main():
     
     # Now you know you have a valid solution
     mip_obj = value(model.Obj)
-    print(f"✔ MIP objective (profit) = {mip_obj:,.2f}")
+    print(f"✔ MIP objective (total cost) = {mip_obj:,.2f}")
 
     print("\nChecking constraint violations after MIP solve...")
     detect_max_constraint_violation(model, threshold=1e-4, top_n=10)

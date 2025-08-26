@@ -1,56 +1,45 @@
 # src/model/objective.py
 
-from pyomo.environ import Constraint, Objective, maximize, value
+from pyomo.environ import Constraint, Objective, minimize, value
 from src.config import ModelConfig
 
 def define_objective(m, cfg: ModelConfig):
     # ProfitDefinition handled in a constraint
     penalty = cfg.penalty
 
-    def cost_definition_rule(m):
-        # a) Fuel cost (imports are a positive cost → negative in objective)
-        imp_cost = sum(
-            m.price_buy[a,e,t] * m.Buy[a,e,t]
-            for (a,e) in m.buyE
-            for t in m.T
-        )
-        # b) Sale revenue
-        sale_rev = sum(
-            m.price_sale[a,e,t] * m.Sale[a,e,t]
-            for (a,e) in m.saleE
-            for t in m.T
-        )
-        # c) Variable O&M on all tech→energy links
-        var_om = sum(
-            m.Generation[g,e,t] * m.cvar[g]
-            for (g,e) in m.TechToEnergy
-            for t in m.T
-        )
-        # d) Startup costs
-        startup = sum(
-            m.Startcost[g,t]
-            for g in m.G
-            for t in m.T
-        )
-        # e) Slack penalties (both import‐slack and export‐slack)
-        slack_sum = sum(
-            m.SlackDemandImport[a, e, t] + m.SlackDemandExport[a, e, t]
-            for (a, e, t) in m.DemandSet
-        )
+    # a) Fuel cost (imports are a positive cost → negative in objective)
+    imp_cost = sum(
+        m.price_buy[a,e,t] * m.Buy[a,e,t]
+        for (a,e) in m.buyE
+        for t in m.T
+    )
+    # b) Sale revenue
+    sale_rev = sum(
+        m.price_sale[a,e,t] * m.Sale[a,e,t]
+        for (a,e) in m.saleE
+        for t in m.T
+    )
+    # c) Variable O&M on all tech→energy links
+    var_om = sum(
+        m.Generation[g,e,t] * m.cvar[g]
+        for (g,e) in m.TechToEnergy
+        for t in m.T
+    )
+    # d) Startup costs
+    startup = sum(
+        m.Startcost[g,t]
+        for g in m.G
+        for t in m.T
+    )
+    # e) Slack penalties (both import‐slack and export‐slack)
+    slack_sum = sum(
+        m.SlackDemandImport[a, e, t] + m.SlackDemandExport[a, e, t]
+        for (a, e, t) in m.DemandSet
+    )
 
-        return m.Cost == (
-                + imp_cost
-                - sale_rev
-                + var_om
-                + startup
-                + penalty * slack_sum
-        )
+    total_cost_expr = imp_cost - sale_rev + var_om + startup + penalty * slack_sum
 
-    #Impose constraint (profit definition)
-    m.CostDefinition = Constraint(rule=cost_definition_rule)
-
-    #Define objective function as profit maximization
-    m.Obj = Objective(expr=m.Cost, sense=maximize)
+    m.Obj = Objective(expr=total_cost_expr, sense=minimize)
 
 def debug_objective(m, cfg):
     # 1) Recompute each piece
@@ -70,7 +59,7 @@ def debug_objective(m, cfg):
     slack_pen = cfg.penalty * slack_sum
 
     # 3) “Hand” objective
-    manual_obj = -imp_cost + sale_rev - var_om - startup - slack_pen
+    manual_obj = imp_cost - sale_rev + var_om + startup + slack_pen
 
     # 4) Pyomo’s objective
     pyomo_obj = value(m.Obj.expr)  # or value(m.Profit)

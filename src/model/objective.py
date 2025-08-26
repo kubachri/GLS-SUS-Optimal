@@ -7,7 +7,7 @@ def define_objective(m, cfg: ModelConfig):
     # ProfitDefinition handled in a constraint
     penalty = cfg.penalty
 
-    def profit_definition_rule(m):
+    def cost_definition_rule(m):
         # a) Fuel cost (imports are a positive cost → negative in objective)
         imp_cost = sum(
             m.price_buy[a,e,t] * m.Buy[a,e,t]
@@ -38,19 +38,19 @@ def define_objective(m, cfg: ModelConfig):
             for (a, e, t) in m.DemandSet
         )
 
-        return m.Profit == (
-                - imp_cost
-                + sale_rev
-                - var_om
-                - startup
-                - penalty * slack_sum
+        return m.Cost == (
+                + imp_cost
+                - sale_rev
+                + var_om
+                + startup
+                + penalty * slack_sum
         )
 
     #Impose constraint (profit definition)
-    m.ProfitDefinition = Constraint(rule=profit_definition_rule)
+    m.CostDefinition = Constraint(rule=cost_definition_rule)
 
     #Define objective function as profit maximization
-    m.Obj = Objective(expr=m.Profit, sense=maximize)
+    m.Obj = Objective(expr=m.Cost, sense=maximize)
 
 def debug_objective(m, cfg):
     # 1) Recompute each piece

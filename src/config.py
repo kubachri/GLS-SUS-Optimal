@@ -8,7 +8,7 @@ class ModelConfig:
     n_test:         int     = 168     # number of hours in test mode
     penalty:        float   = 100000     # slack‐penalty in objective
     data:           str     = 'inc_data'  # name of folder under project root
-    demand_target:  bool    = False
+    demand_target:  bool    = True
     carbon_tax:     int     = 150
     sensitivity:    bool    = False
 

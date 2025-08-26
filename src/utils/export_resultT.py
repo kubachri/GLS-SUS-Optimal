@@ -386,7 +386,7 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         )
         decomp.append({
             "Element": f"Buy_{e}",
-            "Contribution": -tot
+            "Contribution": tot
         })
 
     #  b) Fuel sales (“Sell_…”) are revenues → positive
@@ -397,7 +397,7 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         )
         decomp.append({
             "Element": f"Sell_{e}",
-            "Contribution": tot
+            "Contribution": -tot
         })
 
     #  c) Variable O&M on tech→energy
@@ -406,7 +406,7 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         for (g, e) in model.TechToEnergy
         for t in times
     )
-    decomp.append({"Element": "Variable_OM", "Contribution": -tot_varom})
+    decomp.append({"Element": "Variable_OM", "Contribution": tot_varom})
 
     #  d) Startup costs
     tot_start = sum(
@@ -414,7 +414,7 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         for g in model.G
         for t in times
     )
-    decomp.append({"Element": "Startup", "Contribution": -tot_start})
+    decomp.append({"Element": "Startup", "Contribution": tot_start})
 
     # e) Slack penalties (skip any un‐initialized vars)
     tot_slack_imp = 0.0
@@ -434,7 +434,7 @@ def export_results(model, cfg: ModelConfig, path: str = None):
 
     decomp.append({
         "Element": "Slack",
-        "Contribution": -penalty * (tot_slack_imp + tot_slack_exp)
+        "Contribution": penalty * (tot_slack_imp + tot_slack_exp)
     })
 
     df_decomp = pd.DataFrame(decomp)

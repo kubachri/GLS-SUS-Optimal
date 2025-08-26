@@ -22,7 +22,6 @@ def parse_args():
     p.add_argument('--n-test', type=int, help="hours to keep when --test is on")
     p.add_argument('--penalty', type=float, help="penalty multiplier for slack in objective")
     p.add_argument('--demand-target', type=lambda x: x.lower() == 'true', help="choose whether to enforce methanol annual demand target")
-    p.add_argument('--carbon_tax', type=int, help="set the carbon tax for emissions")
     p.add_argument('--sensitivity', type=lambda x: x.lower() == 'true', help="apply sensitivity case adjustments")
     return p.parse_args()
 
@@ -41,7 +40,6 @@ def main():
         n_test=args.n_test if args.n_test is not None else defaults.n_test,
         penalty=args.penalty if args.penalty is not None else defaults.penalty,
         demand_target=args.demand_target if args.demand_target is not None else defaults.demand_target,
-        carbon_tax=args.carbon_tax if args.carbon_tax is not None else defaults.carbon_tax,
         sensitivity=args.sensitivity if args.sensitivity is not None else defaults.sensitivity
     )
 

@@ -8,7 +8,6 @@ class ModelConfig:
     n_test:         int     = 168     # number of hours in test mode
     penalty:        float   = 100000     # slack‐penalty in objective
     demand_target:  bool    = True
-    carbon_tax:     int     = 150
     sensitivity:    bool    = False
 
     @property

@@ -1,1 +1,3 @@
 Without any competition, the biogas plant produces more CO2 than the methanol plant needs, so the dual is 0.
+
+Alamia on his paper penalised grid emissions and natural gas emission with a co2 tax, so you pay spot price,ref + tarrif + emission tax

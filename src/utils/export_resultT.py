@@ -437,6 +437,13 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         "Contribution": penalty * (tot_slack_imp + tot_slack_exp)
     })
 
+    # Add TotalCost as the sum of all contributions
+    total_cost = sum(entry["Contribution"] for entry in decomp)
+    decomp.append({
+        "Element": "TotalCost",
+        "Contribution": total_cost
+    })
+
     df_decomp = pd.DataFrame(decomp)
 
     # ----------------------------------------------------------------

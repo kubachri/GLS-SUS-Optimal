@@ -233,7 +233,7 @@ def load_data(cfg):
     #     for (area, energy, time), price in price_buy.items()
     # }
 
-    # Apply carbon tax to NG usage (198 kgCO2eq/MWh and 50 EUR/tCO2)
+    # Apply carbon tax to NG usage (198 kgCO2eq/MWh and 50 EUR/tCO2 - 2030 Denmark)
     price_buy = {
         (area, energy, time): (price + 0.198*50 if energy == "NatGas" else price)
         for (area, energy, time), price in price_buy.items()

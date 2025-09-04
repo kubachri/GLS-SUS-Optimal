@@ -9,6 +9,7 @@ class ModelConfig:
     penalty:        float   = 100000     # slack‐penalty in objective
     demand_target:  bool    = True
     sensitivity:    bool    = False
+    electricity_mandate: bool = True
 
     @property
     def data_dir(self) -> str:

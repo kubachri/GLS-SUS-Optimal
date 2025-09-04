@@ -167,7 +167,7 @@ def load_data(cfg):
     # -----------------------
 
     # Parse with header=3 to use the 4th row as column names and drop the top 3 metadata rows
-    dem_df = xls.parse('Demand', header=3).dropna(how='all')
+    dem_df = xls.parse('DemandHourly', header=3).dropna(how='all')
 
     # Rename first column to "Hour"
     dem_df.rename(columns={dem_df.columns[0]:'Hour'}, inplace=True)

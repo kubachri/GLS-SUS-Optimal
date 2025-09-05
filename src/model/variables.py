@@ -22,3 +22,4 @@ def define_variables(model):
     model.Startcost         = Var(model.G,          model.T, domain=NonNegativeReals)
     model.Online            = Var(model.G,          model.T, domain=Binary)
     model.Charge            = Var(model.G_s,        model.T, domain=Binary)
+    model.SlackMethanol     = Var(model.W,                   domain=NonNegativeReals)

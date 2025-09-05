@@ -42,9 +42,13 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
 
     #DemandTarget
     model.Demand_Target = cfg.demand_target
-
     if model.Demand_Target:
         print("Running with a demand target ...\n")
+
+    #Electricity mandate
+    model.ElectricityMandate = cfg.electricity_mandate
+    if model.ElectricityMandate:
+        print("Running with an electricity mandate (<20 EUR/MWh) ...\n")
 
     define_sets(model, data)
     define_params(model, data, tech_df)

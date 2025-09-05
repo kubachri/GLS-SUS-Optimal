@@ -35,7 +35,7 @@ def define_objective(m, cfg: ModelConfig):
     slack_sum = sum(
         m.SlackDemandImport[a, e, t] + m.SlackDemandExport[a, e, t]
         for (a, e, t) in m.DemandSet
-    )
+    ) + sum(m.SlackMethanol[w] for w in m.W)
 
     total_cost_expr = imp_cost - sale_rev + var_om + startup + penalty * slack_sum
 

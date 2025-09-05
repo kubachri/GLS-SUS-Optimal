@@ -243,7 +243,17 @@ def startup_cost_rule(m, g, t):
     prev_on = 0 if t == m.T.first() else m.Online[g, m.T.prev(t)]
     return m.Startcost[g,t] >= m.cstart[g] * (m.Online[g,t] - prev_on)
 
-# 13) Methanol demand
+# 13) Electricity Mandate (Green H2)
+def green_electricity_import(m, a, e, t):
+    if (a,e) == ('DK1','Electricity'):
+        if m.price_buy[a,e,t] <= 20.0:
+            return Constraint.Skip
+        else:
+            return m.Buy[a,e,t] == 0
+    else:
+        return Constraint.Skip
+
+# 14) Methanol demand
 def weekly_methanol_demand_rule(m, w):
     """
     For each week w:
@@ -268,7 +278,7 @@ def weekly_methanol_demand_rule(m, w):
     )
 
     # 3) Equate to your weekly demand parameter
-    return gen_sum == m.methanol_demand_week[w]
+    return gen_sum + m.SlackMethanol[w] >= m.methanol_demand_week[w] 
 
 def add_constraints(model):
     model.Fuelmix = Constraint(model.f_in, model.T, rule=fuelmix_rule)
@@ -290,5 +300,7 @@ def add_constraints(model):
     model.Capacity = Constraint(model.G, model.T, rule=capacity_rule)
     model.MinimumLoad = Constraint(model.G, model.T, rule=minimum_load_rule)
     model.StartupCost = Constraint(model.G, model.T, rule=startup_cost_rule)
+    if model.ElectricityMandate:
+        model.GreenElectricity = Constraint(model.buyE, model.T, rule=green_electricity_import)
     if model.Demand_Target:
         model.WeeklyMethanolTarget = Constraint(model.W, rule=weekly_methanol_demand_rule)

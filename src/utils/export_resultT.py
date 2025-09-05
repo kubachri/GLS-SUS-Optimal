@@ -434,7 +434,28 @@ def export_results(model, cfg: ModelConfig, path: str = None):
 
     decomp.append({
         "Element": "Slack",
+        "Contribution": tot_slack_imp + tot_slack_exp
+    })
+
+    decomp.append({
+        "Element": "Slack Cost",
         "Contribution": penalty * (tot_slack_imp + tot_slack_exp)
+    })
+
+    tot_slack_methanol = 0
+    for w in model.W:
+        var = model.SlackMethanol[w]
+        if var.value is not None:
+            tot_slack_methanol += value(var)
+
+    decomp.append({
+        "Element": "Slack Methanol",
+        "Contribution": tot_slack_methanol
+    })
+
+    decomp.append({
+        "Element": "Slack Methanol Cost",
+        "Contribution": penalty * tot_slack_methanol
     })
 
     # Add TotalCost as the sum of all contributions

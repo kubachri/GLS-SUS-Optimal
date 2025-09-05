@@ -21,9 +21,9 @@ def parse_args():
     p.add_argument('--test', action='store_true', help="short horizon test run")
     p.add_argument('--n-test', type=int, help="hours to keep when --test is on")
     p.add_argument('--penalty', type=float, help="penalty multiplier for slack in objective")
-    p.add_argument('--demand-target', type=lambda x: x.lower() == 'true', help="choose whether to enforce methanol annual demand target")
+    p.add_argument('--demand_target', type=lambda x: x.lower() == 'true', help="choose whether to enforce methanol annual demand target")
     p.add_argument('--sensitivity', type=lambda x: x.lower() == 'true', help="apply sensitivity case adjustments")
-    p.add_argument('--electricity-mandate', type=lambda x: x.lower() == 'true', help="restrict grid electricity buy to <20 €/MWh")
+    p.add_argument('--electricity_mandate', type=lambda x: x.lower() == 'true', help="restrict grid electricity buy to <20 €/MWh")
     return p.parse_args()
 
 def main():
@@ -81,7 +81,7 @@ def main():
         print("✘ Model is infeasible. Extracting IIS …")
         grb = solver._solver_model
         grb.computeIIS()
-        grb.write("model.ilp.iis")
+        grb.write("model_iis.ilp")
         print(" → IIS written to model.ilp.iis.")
     elif term == TerminationCondition.unbounded:
         print("⚠ MIP is unbounded (with integer vars).  → Relaxing integrality to extract a ray…")

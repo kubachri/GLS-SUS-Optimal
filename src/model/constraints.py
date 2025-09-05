@@ -245,13 +245,25 @@ def startup_cost_rule(m, g, t):
 
 # 13) Electricity Mandate (Green H2)
 def green_electricity_import(m, a, e, t):
-    if (a,e) == ('DK1','Electricity'):
-        if m.price_buy[a,e,t] <= 20.0:
-            return Constraint.Skip
-        else:
-            return m.Buy[a,e,t] == 0
-    else:
+    if (a, e) != ('DK1', 'Electricity'):
         return Constraint.Skip
+    if m.price_buy[a, e, t] > 20.0:
+        return m.Buy[a, e, t] == 0
+    return Constraint.Skip
+    
+def restrict_grid_import(m, t):
+    # Grid electricity buy at time t — only DK1
+    grid_buy = m.Buy['DK1', 'Electricity', t]
+
+    # Total electricity used by all technologies at time t
+    total_electricity_use = sum(
+        m.Fueluse[g, 'Electricity', t]
+        for (g, f) in m.f_in
+        if f == 'Electricity'
+    )
+
+    return grid_buy <= m.ElectricityMandateValue * total_electricity_use
+
 
 # 14) Methanol demand
 def weekly_methanol_demand_rule(m, w):
@@ -300,7 +312,9 @@ def add_constraints(model):
     model.Capacity = Constraint(model.G, model.T, rule=capacity_rule)
     model.MinimumLoad = Constraint(model.G, model.T, rule=minimum_load_rule)
     model.StartupCost = Constraint(model.G, model.T, rule=startup_cost_rule)
+    if model.GreenElectricity:
+        model.GreenGrid = Constraint(model.buyE, model.T, rule=green_electricity_import)
     if model.ElectricityMandate:
-        model.GreenElectricity = Constraint(model.buyE, model.T, rule=green_electricity_import)
+        model.GridRestriction = Constraint(model.buyE, model.T, rule=restrict_grid_import)
     if model.Demand_Target:
         model.WeeklyMethanolTarget = Constraint(model.W, rule=weekly_methanol_demand_rule)

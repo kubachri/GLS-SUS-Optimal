@@ -262,7 +262,7 @@ def restrict_grid_import(m, t):
         if f == 'Electricity'
     )
 
-    return grid_buy <= m.ElectricityMandateValue * total_electricity_use
+    return grid_buy <= m.ElectricityMandate* total_electricity_use
 
 
 # 14) Methanol demand
@@ -315,6 +315,6 @@ def add_constraints(model):
     if model.GreenElectricity:
         model.GreenGrid = Constraint(model.buyE, model.T, rule=green_electricity_import)
     if model.ElectricityMandate:
-        model.GridRestriction = Constraint(model.buyE, model.T, rule=restrict_grid_import)
+        model.GridRestriction = Constraint(model.T, rule=restrict_grid_import)
     if model.Demand_Target:
         model.WeeklyMethanolTarget = Constraint(model.W, rule=weekly_methanol_demand_rule)

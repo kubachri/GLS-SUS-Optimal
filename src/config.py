@@ -4,12 +4,13 @@ import os
 
 @dataclass
 class ModelConfig:
-    test_mode:      bool    = False   # run a short “N_test” horizon?
-    n_test:         int     = 168     # number of hours in test mode
-    penalty:        float   = 100000     # slack‐penalty in objective
-    demand_target:  bool    = True
-    sensitivity:    bool    = False
-    electricity_mandate: bool = True
+    test_mode:              bool    = False   # run a short “N_test” horizon?
+    n_test:                 int     = 168     # number of hours in test mode
+    penalty:                float   = 100000     # slack‐penalty in objective
+    demand_target:          bool    = True
+    sensitivity:            bool    = False
+    green_electricity:      bool = True
+    electricity_mandate:    float = 0.10  # 10% limit
 
     @property
     def data_dir(self) -> str:

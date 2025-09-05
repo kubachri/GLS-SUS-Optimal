@@ -23,7 +23,7 @@ def parse_args():
     p.add_argument('--penalty', type=float, help="penalty multiplier for slack in objective")
     p.add_argument('--demand_target', type=lambda x: x.lower() == 'true', help="choose whether to enforce methanol annual demand target")
     p.add_argument('--sensitivity', type=lambda x: x.lower() == 'true', help="apply sensitivity case adjustments")
-    p.add_argument('--electricity_mandate', type=lambda x: x.lower() == 'true', help="restrict grid electricity buy to <20 €/MWh")
+    p.add_argument('--green_electricity', type=lambda x: x.lower() == 'true', help="restrict grid electricity buy to <20 €/MWh")
     return p.parse_args()
 
 def main():
@@ -42,7 +42,7 @@ def main():
         penalty=args.penalty if args.penalty is not None else defaults.penalty,
         demand_target=args.demand_target if args.demand_target is not None else defaults.demand_target,
         sensitivity=args.sensitivity if args.sensitivity is not None else defaults.sensitivity,
-        electricity_mandate=args.electricity_mandate if args.electricity_mandate is not None else defaults.electricity_mandate        
+        green_electricity=args.green_electricity if args.green_electricity is not None else defaults.green_electricity        
     )
 
     print("Building Pyomo model ...\n")

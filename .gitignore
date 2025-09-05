@@ -9,9 +9,6 @@ __pycache__/
 results/results.xlsx
 *.log
 
-# 4. Any scripts you’re keeping out of version control
-w_H2_demand_*.py
-
 # IntelliJ / PyCharm project files
 .idea/
 
@@ -22,8 +19,6 @@ w_H2_demand_*.py
 *.xlsx
 results/
 
-# Single file you want ignored
-all_model.py
 
 #data
 inc_data
@@ -39,3 +34,5 @@ NewDataFormat.xlsx
 extremes.csv
 
 model_iis.ilp
+
+!Data_min_cost.xlsx

@@ -55,6 +55,11 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
     if model.ElectricityMandate:
         print(f"Running with an electricity mandate of {model.ElectricityMandate*100}% ...\n")
 
+    #Electricity export limit
+    model.ElProdToGrid = cfg.el_prod_to_grid
+    if model.ElProdToGrid:
+        print(f"Running with grid export to production ratio of {model.ElProdToGrid*100}% ...\n")
+
     define_sets(model, data)
     define_params(model, data, tech_df)
     define_variables(model)

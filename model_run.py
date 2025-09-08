@@ -25,6 +25,7 @@ def parse_args():
     p.add_argument('--sensitivity', type=lambda x: x.lower() == 'true', help="apply sensitivity case adjustments")
     p.add_argument('--green_electricity', type=lambda x: x.lower() == 'true', help="restrict grid electricity buy to <20 €/MWh")
     p.add_argument('--electricity_mandate', type=float, help="restricts electricity imports to a percent of consumption each hour")
+    p.add_argument('--el_prod_to_grid', type=float, help="restricts electricity exports to a percent of generation each hour")
     return p.parse_args()
 
 def main():
@@ -44,7 +45,8 @@ def main():
         demand_target=args.demand_target if args.demand_target is not None else defaults.demand_target,
         sensitivity=args.sensitivity if args.sensitivity is not None else defaults.sensitivity,
         green_electricity=args.green_electricity if args.green_electricity is not None else defaults.green_electricity,
-        electricity_mandate=args.electricity_mandate if args.electricity_mandate is not None else defaults.electricity_mandate
+        electricity_mandate=args.electricity_mandate if args.electricity_mandate is not None else defaults.electricity_mandate,
+        el_prod_to_grid=args.el_prod_to_grid if args.el_prod_to_grid is not None else defaults.el_prod_to_grid
     )
 
     print("Building Pyomo model ...\n")

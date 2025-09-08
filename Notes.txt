@@ -3,3 +3,8 @@ Without any competition, the biogas plant produces more CO2 than the methanol pl
 Alamia on his paper penalised grid emissions and natural gas emission with a co2 tax, so you pay spot price,ref + tarrif + emission tax
 
 Alamia
+
+Dogan input:
+Remove biomethane from the demand and treat biogas plant as a CO2 source for the methanol production. Then the CO2 duals are only affected by the methanol (thus CO2) demand.
+Then we can sell whatever biomethane it occurs as a side revenue to the plant at a fixed price.
+

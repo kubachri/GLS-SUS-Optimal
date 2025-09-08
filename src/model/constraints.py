@@ -264,6 +264,18 @@ def restrict_grid_import(m, t):
 
     return grid_buy <= m.ElectricityMandate* total_electricity_use
 
+def restrict_grid_export(m, t):
+    # Grid electricity sale at time t — only DK1
+    grid_sale = m.Sale['DK1', 'Electricity', t]
+
+    # Total electricity produced at time t by any tech that exports electricity
+    total_generation = sum(
+        m.Generation[g, 'Electricity', t]
+        for (g, f) in m.f_out
+        if f == 'Electricity'
+    )
+
+    return grid_sale <= m.ElProdToGrid * total_generation
 
 # 14) Methanol demand
 def weekly_methanol_demand_rule(m, w):
@@ -327,6 +339,8 @@ def add_constraints(model):
         model.GreenGrid = Constraint(model.buyE, model.T, rule=green_electricity_import)
     if model.ElectricityMandate:
         model.GridRestriction = Constraint(model.T, rule=restrict_grid_import)
+    if model.ElProdToGrid:
+        model.ExportLimit = Constraint(model.T, rule=restrict_grid_export)
     if model.Demand_Target:
         model.WeeklyMethanolTarget = Constraint(model.W, rule=weekly_methanol_demand_rule)
         model.HourlyBiomethaneDemand = Constraint(model.T, rule=hourly_biomethane_demand_rule)

@@ -338,6 +338,13 @@ def export_results(model, cfg: ModelConfig, path: str = None):
             meth_rows.append({'Week': w, 'MethanolDual': dual_val})
         df_meth = pd.DataFrame(meth_rows)
 
+        # 2) Weekly methanol‐target duals
+        biomethane = []
+        for t in sorted(model.T):
+            # constraint index is just w
+            dual_val = model.dual.get(model.HourlyBiomethaneDemand[t], 0.0)
+            biomethane.append({'Time': t, 'BiomethaneDual': dual_val})
+        df_biomethane = pd.DataFrame(biomethane)
 
     # ----------------------------------------------------------------
     # --- ResultC (capacity factors) ---------------------------------
@@ -458,6 +465,22 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         "Contribution": penalty * tot_slack_methanol
     })
 
+    tot_slack_biomethane = 0
+    for t in model.T:
+        var = model.SlackBiomethane[t]
+        if var.value is not None:
+            tot_slack_biomethane += value(var)
+
+    decomp.append({
+        "Element": "Slack Biomethane",
+        "Contribution": tot_slack_biomethane
+    })
+
+    decomp.append({
+        "Element": "Slack Biomethane Cost",
+        "Contribution": penalty * tot_slack_biomethane
+    })
+
     # Add TotalCost as the sum of all contributions
     total_cost = sum(entry["Contribution"] for entry in decomp)
     decomp.append({
@@ -512,6 +535,8 @@ def export_results(model, cfg: ModelConfig, path: str = None):
                 if model.Demand_Target:
                     # then leave one blank line and write the weekly table
                     df_meth.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=5)
+                    df_biomethane.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=8)
+                    
 
                 # 10) Objective function decomposition
                 df_decomp.to_excel(writer, sheet_name="ObjDecomp", index=False)

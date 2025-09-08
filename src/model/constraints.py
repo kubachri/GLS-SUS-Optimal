@@ -290,7 +290,18 @@ def weekly_methanol_demand_rule(m, w):
     )
 
     # 3) Equate to your weekly demand parameter
-    return gen_sum + m.SlackMethanol[w] >= m.methanol_demand_week[w] 
+    return gen_sum + m.SlackMethanol[w] == m.methanol_demand_week[w] 
+
+def hourly_biomethane_demand_rule(m, t):
+    biomethane_producers = [
+        (g, e) for (g, e) in m.f_out
+        if e.lower() == 'biomethane'
+    ]
+    if not biomethane_producers:
+        return Constraint.Skip
+
+    gen_sum = sum(m.Generation[g, e, t] for (g, e) in biomethane_producers)
+    return gen_sum + m.SlackBiomethane[t] == m.biomethane_demand_hour[t]
 
 def add_constraints(model):
     model.Fuelmix = Constraint(model.f_in, model.T, rule=fuelmix_rule)
@@ -318,3 +329,4 @@ def add_constraints(model):
         model.GridRestriction = Constraint(model.T, rule=restrict_grid_import)
     if model.Demand_Target:
         model.WeeklyMethanolTarget = Constraint(model.W, rule=weekly_methanol_demand_rule)
+        model.HourlyBiomethaneDemand = Constraint(model.T, rule=hourly_biomethane_demand_rule)

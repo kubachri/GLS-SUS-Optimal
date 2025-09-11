@@ -1,5 +1,5 @@
 # 1. Don’t check in your virtual-env
-venv/
+.venv/
 __pycache__/
 
 # 2. IDE/project files

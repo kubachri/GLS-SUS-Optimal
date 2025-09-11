@@ -12,7 +12,7 @@ def load_data(cfg):
     Returns the same `data` dict shape as before.
     """
     # Path to the Excel file (assumed in project root)
-    excel_path = os.path.join(os.getcwd(), "TestData.xlsx")
+    excel_path = os.path.join(os.getcwd(), "Data.xlsx")
     if not os.path.isfile(excel_path):
         raise FileNotFoundError(f"Could not find Excel data file: {excel_path}")
 

@@ -458,10 +458,10 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     })
 
     # Add TotalCost as the sum of all contributions
-    total_cost = sum(entry["Contribution"] for entry in decomp)
+    total_profit = sum(entry["Contribution"] for entry in decomp)
     decomp.append({
-        "Element": "TotalCost",
-        "Contribution": total_cost
+        "Element": "TotalProfit",
+        "Contribution": total_profit
     })
 
     df_decomp = pd.DataFrame(decomp)

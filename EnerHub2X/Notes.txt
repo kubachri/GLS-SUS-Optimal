@@ -8,3 +8,7 @@ Dogan input:
 Remove biomethane from the demand and treat biogas plant as a CO2 source for the methanol production. Then the CO2 duals are only affected by the methanol (thus CO2) demand.
 Then we can sell whatever biomethane it occurs as a side revenue to the plant at a fixed price.
 
+The estimated cost for biogas is reported to be in the range of 2.6 – 3.21 DKK/Nm3 (400-490 DKK/MWh)
+
+DGC has recently investigated the cost for upgrading, and the cost for larger plants was found to be approx. 0.6 DKK/Nm3 CH4 (4). Adding this cost to the 
+cost for biogas results in a biomethane cost of 4.6 – 5.5 DKK/Nm3 CH4 (460 – 550 DKK/MWh) dependent on the type of organic material used and production setup.

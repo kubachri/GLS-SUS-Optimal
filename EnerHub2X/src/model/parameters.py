@@ -1,6 +1,6 @@
 # src/model/params.py
 
-from pyomo.environ import Param, NonNegativeReals, Reals, PositiveIntegers
+from pyomo.environ import Param, NonNegativeReals, Reals, PositiveIntegers, value
 
 def define_params(model, data, tech_df):
     """
@@ -48,11 +48,12 @@ def define_params(model, data, tech_df):
     Minimum  = tech_df['Minimum'].astype(float).to_dict()
 
     # 7) Time‐series & interconnector capacities
-    profile     = data['Profile']
-    demand      = data['Demand']
-    price_buy   = data['price_buy']
-    price_sell  = data['price_sell']
-    Xcap        = data['Xcap']
+    profile         = data['Profile']
+    demand          = data['Demand']
+    demand_target   = data['DemandTarget']
+    price_buy       = data['price_buy']
+    price_sell      = data['price_sell']
+    Xcap            = data['Xcap']
 
     # === Now attach all to the model ===
     model.Profile = Param(model.G, model.T, initialize=profile, within=NonNegativeReals)
@@ -72,23 +73,25 @@ def define_params(model, data, tech_df):
     model.price_sale = Param(model.A, model.F, model.T, initialize=price_sell, within=Reals)
     model.InterconnectorCapacity = Param(model.LinesInterconnectors, model.F, model.T,
                                          initialize=Xcap, default= 0, within=NonNegativeReals)
+    model.DemandTarget = Param(model.DemandFuel, initialize=demand_target, within=NonNegativeReals)
 
-    if model.Demand_Target:
-        # 1) Define weekOfT[t] = integer in {1, 2, …, n_weeks}
-        #    where each week covers 168 time‐steps in T.
-        def _week_of_t_init(m, t):
-            # build an ordered Python list of all time‐indices
-            all_t = list(m.T)            # e.g. [t1, t2, …, tN]
-            idx = all_t.index(t)         # gives 0, 1, 2, …, N-1
-            return (idx // 168) + 1      # integer division → 1..n_weeks
 
-        # Attach the Param to the model
-        model.weekOfT = Param(model.T, initialize=_week_of_t_init, within=PositiveIntegers)
+    def _week_of_t_init(m, t):
+        all_t = list(m.T)
+        idx = all_t.index(t)
+        return f"Target{(idx // 168) + 1}"
 
-        # 2) Define methanol_demand_week[w] = 32000/52  for each week w in W
-        annual_methanol_demand = 8000.0
-        new_target = annual_methanol_demand / 8760.0 * len(model.T)
-        weekly_target = float(new_target / len(model.W))
-        demand_dict = { w: weekly_target for w in model.W}
-        model.methanol_demand_week = Param(model.W, initialize=demand_dict, within=NonNegativeReals)
-        print(f"Weeekly demand target: {int(weekly_target)} tons per week.\n")
+    model.weekOfT = Param(model.T, initialize=_week_of_t_init)
+    model.weekOfT.pprint()
+
+    # Get only steps relevant to this run, based on model.T
+    used_steps = sorted({model.weekOfT[t] for t in model.T})
+
+    print("\n✅ Weekly Demand Targets (active for this run):\n")
+    fuels = sorted(set(f for (_, f) in model.DemandFuel))
+
+    for step in used_steps:
+        print(f"  {step}:")
+        for af in fuels:
+            if (step, af) in model.DemandTarget:
+                print(f"    - {af}: {value(model.DemandTarget[step, af]):.2f} tons")

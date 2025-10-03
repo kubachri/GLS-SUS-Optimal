@@ -278,31 +278,17 @@ def restrict_grid_export(m, t):
     return grid_sale <= m.ElProdToGrid * total_generation
 
 # 14) Methanol demand
-def weekly_methanol_demand_rule(m, w):
-    """
-    For each week w:
-      sum_{(tech,'Methanol',t)} Generation(tech,'Methanol',t)
-      == weekly production target.
-    """
-    # 1) Collect all (tech,carrier) pairs that produce methanol
-    methanol_producers = [
-        (g,e) for (g,e) in m.f_out
-        if e.lower() == 'methanol'
-    ]
-    # If no tech produces methanol, skip
-    if not methanol_producers:
-        return Constraint.Skip
-
-    # 2) Sum up all generation of methanol in week w
-    gen_sum = sum(
-        m.Generation[g, e, t]
-        for (g,e) in methanol_producers
+def target_demand_rule(m, step, area_fuel):
+    area, fuel = area_fuel.split('.')
+    total = sum(
+        m.Generation[g, fuel, t]
+        for g in m.G
         for t in m.T
-        if m.weekOfT[t] == w
+        if (g, fuel) in m.f_out and (area, g) in m.location and m.weekOfT[t] == step
     )
+    return total + m.SlackTarget[step, area_fuel] >= m.DemandTarget[step, area_fuel]
 
-    # 3) Equate to your weekly demand parameter
-    return gen_sum + m.SlackMethanol[w] == m.methanol_demand_week[w] 
+
 
 
 def add_constraints(model):
@@ -325,11 +311,10 @@ def add_constraints(model):
     model.Capacity = Constraint(model.G, model.T, rule=capacity_rule)
     model.MinimumLoad = Constraint(model.G, model.T, rule=minimum_load_rule)
     model.StartupCost = Constraint(model.G, model.T, rule=startup_cost_rule)
+    model.TargetDemand = Constraint(model.DemandFuel, rule=target_demand_rule)
     if model.GreenElectricity:
         model.GreenGrid = Constraint(model.buyE, model.T, rule=green_electricity_import)
     if model.ElectricityMandate:
         model.GridRestriction = Constraint(model.T, rule=restrict_grid_import)
     if model.ElProdToGrid:
         model.ExportLimit = Constraint(model.T, rule=restrict_grid_export)
-    if model.Demand_Target:
-        model.WeeklyMethanolTarget = Constraint(model.W, rule=weekly_methanol_demand_rule)

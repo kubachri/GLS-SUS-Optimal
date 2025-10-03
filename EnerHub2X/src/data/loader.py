@@ -278,6 +278,36 @@ def load_data(cfg):
 
     flowset = [(a1,a2,f) for (a1,a2,f) in flowset if f in fuels]
 
+    # --- DEMAND TARGET sheet ---
+    # --- Load DemandTarget sheet ---
+    df = sheets['DemandTarget'].dropna(how='all')
+
+    # Row 3 (index 2) is the actual header row: ["Steps", "DK1.Methanol", ...]
+    df.columns = df.iloc[2]
+    df = df.drop(index=range(3))  # Drop rows 0–2
+
+    # Rename first column to "Step"
+    first_col = df.columns[0]
+    df = df.rename(columns={first_col: "Step"})
+
+    # Ensure "Step" column is string
+    df["Step"] = df["Step"].astype(str).str.strip()
+
+    # Build dictionary for all (step, area.fuel) pairs
+    demand_target = {}
+    for _, row in df.iterrows():
+        step = row["Step"]
+        for col in df.columns:
+            if col == "Step":
+                continue
+            val = row[col]
+            if pd.notna(val):
+                area_fuel = str(col).strip()  # e.g., "DK1.Methanol"
+                try:
+                    demand_target[(step, area_fuel)] = float(val)
+                except Exception as e:
+                    print(f"⚠ Skipping ({step}, {area_fuel}) → {val}: {e}")
+
     # -----------------------
     # Assemble and return
     # -----------------------
@@ -295,9 +325,11 @@ def load_data(cfg):
         'price_sell':   price_sell,
         'Xcap':         Xcap,
         'FlowSet':      flowset,
-        'location':     location
+        'location':     location,
+        'DemandTarget': demand_target
     }
 
+    print(data['DemandTarget'])
     if cfg.sensitivity:
         tech_df, data = apply_sensitivity_overrides(tech_df, data)
 

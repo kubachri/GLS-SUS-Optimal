@@ -4,6 +4,7 @@ import pandas as pd
 from pyomo.environ import value
 from pathlib import Path
 from src.config import ModelConfig
+from collections import defaultdict
 
 def export_results(model, cfg: ModelConfig, path: str = None):
     """
@@ -329,14 +330,20 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     #     co2_rows.append(row)
     # df_co2 = pd.DataFrame(co2_rows)
 
-    if model.Demand_Target:
-    # 2) Weekly methanol‐target duals
-        meth_rows = []
-        for w in sorted(model.W):
-            # constraint index is just w
-            dual_val = model.dual.get(model.WeeklyMethanolTarget[w], 0.0)
-            meth_rows.append({'Week': w, 'MethanolDual': dual_val})
-        df_meth = pd.DataFrame(meth_rows)
+
+    # === Export duals for all enforced fuel demands ===
+    if hasattr(model, "TargetDemand") and hasattr(model, "DemandFuel"):
+        dual_rows = []
+        for (step, af) in sorted(model.DemandFuel):
+            constraint = model.TargetDemand[step, af]
+            dual_val = model.dual.get(constraint, float("nan"))  # NaN if no dual
+            dual_rows.append({
+                "Step": step,
+                "Area.Fuel": af,
+                "Dual Value": dual_val
+            })
+
+        df_duals = pd.DataFrame(dual_rows)
 
     # ----------------------------------------------------------------
     # --- ResultC (capacity factors) ---------------------------------
@@ -441,21 +448,23 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         "Contribution": - penalty * (tot_slack_imp + tot_slack_exp)
     })
 
-    tot_slack_methanol = 0
-    for w in model.W:
-        var = model.SlackMethanol[w]
+    # Aggregate slack and cost for all demand-driven fuels
+    fuel_slack_totals = defaultdict(float)
+
+    for (step, af) in model.DemandFuel:
+        var = model.SlackTarget[step, af]
         if var.value is not None:
-            tot_slack_methanol += value(var)
+            fuel_slack_totals[af] += value(var)
 
-    decomp.append({
-        "Element": "Slack Methanol",
-        "Contribution": tot_slack_methanol
-    })
-
-    decomp.append({
-        "Element": "Slack Methanol Cost",
-        "Contribution": - penalty * tot_slack_methanol
-    })
+    for af, slack_val in fuel_slack_totals.items():
+        decomp.append({
+            "Element": f"Slack {af}",
+            "Contribution": slack_val
+        })
+        decomp.append({
+            "Element": f"Slack {af} Cost",
+            "Contribution": - penalty * slack_val
+        })
 
     # Add TotalCost as the sum of all contributions
     total_profit = sum(entry["Contribution"] for entry in decomp)
@@ -508,9 +517,8 @@ def export_results(model, cfg: ModelConfig, path: str = None):
                 # 9) Duals – hourly and weekly dual values
                 # write hourly CO2 at the top
                 df_co2.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=0)
-                if model.Demand_Target:
-                    # then leave one blank line and write the weekly table
-                    df_meth.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=5)
+
+                df_duals.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=5)
                     
 
                 # 10) Objective function decomposition

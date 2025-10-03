@@ -32,10 +32,10 @@ def define_objective(m, cfg: ModelConfig):
         for t in m.T
     )
     # e) Slack penalties (both import‐slack and export‐slack)
-    slack_sum = sum(
-        m.SlackDemandImport[a, e, t] + m.SlackDemandExport[a, e, t]
-        for (a, e, t) in m.DemandSet
-    ) + sum(m.SlackMethanol[w] for w in m.W) + sum(m.SlackBiomethane[t] for t in m.T)
+    slack_sum = (
+        sum(m.SlackDemandImport[a, e, t] + m.SlackDemandExport[a, e, t] for (a, e, t) in m.DemandSet)
+        + sum(m.SlackTarget[s, f] for (s, f) in m.DemandFuel)
+    )
 
     total_profit_expr = sale_rev -imp_cost - var_om - startup - penalty * slack_sum
 

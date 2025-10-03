@@ -80,6 +80,10 @@ def define_sets(model, data):
     model.DemandSet = Set(initialize=raw_demand.keys(), dimen=3, within=model.A * model.F * model.T)
     model.TechToEnergy = Set(initialize=tech_to_f, dimen=2, within=model.G * model.F)
 
+    demand_target_keys = data['DemandTarget'].keys()
+    model.DemandFuel = Set(dimen=2, initialize=demand_target_keys)
+    model.DemandSteps = Set(initialize=sorted({step for (step, _) in demand_target_keys}))
+
     if model.Demand_Target:
         # Demand Target
         # 1) Compute how many full “168‐step” weeks fit into |T|.

@@ -83,17 +83,3 @@ def define_sets(model, data):
     demand_target_keys = data['DemandTarget'].keys()
     model.DemandFuel = Set(dimen=2, initialize=demand_target_keys)
     model.DemandSteps = Set(initialize=sorted({step for (step, _) in demand_target_keys}))
-
-    if model.Demand_Target:
-        # Demand Target
-        # 1) Compute how many full “168‐step” weeks fit into |T|.
-        n_periods = len(data['T'])
-        steps_per_week = 168
-        n_weeks = n_periods // steps_per_week    # integer division → should be 52
-        print(f"Running for {n_weeks} weeks \n")
-
-        # 2) Build a Python list [1,2,…,n_weeks]
-        week_list = list(range(1, n_weeks + 1))
-
-        # 3) Expose that as a Pyomo Set W:
-        model.W = Set(initialize=week_list, ordered=True)

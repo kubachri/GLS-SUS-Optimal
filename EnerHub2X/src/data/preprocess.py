@@ -70,4 +70,14 @@ def slice_time_series(data, n_hours):
     # 5) Override the time‐set itself
     data['T'] = T_short
 
+    # 6) Trim DemandTarget to only include active steps (Target1, Target2, ..., TargetN)
+    num_weeks = (len(T_short) + 167) // 168  # ceiling division to cover partial weeks
+    active_steps = {f"Target{i+1}" for i in range(num_weeks)}
+
+    data['DemandTarget'] = {
+                (step, af): val
+                for (step, af), val in data['DemandTarget'].items()
+                if step in active_steps
+            }
+    
     return data

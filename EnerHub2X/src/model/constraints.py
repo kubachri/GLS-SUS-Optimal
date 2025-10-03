@@ -277,19 +277,16 @@ def restrict_grid_export(m, t):
 
     return grid_sale <= m.ElProdToGrid * total_generation
 
-# 14) Methanol demand
+# 14) Weekly demand
 def target_demand_rule(m, step, area_fuel):
     area, fuel = area_fuel.split('.')
     total = sum(
         m.Generation[g, fuel, t]
         for g in m.G
         for t in m.T
-        if (g, fuel) in m.f_out and (area, g) in m.location and m.weekOfT[t] == step
+        if (g, fuel) in m.f_out and m.weekOfT[t] == step
     )
     return total + m.SlackTarget[step, area_fuel] >= m.DemandTarget[step, area_fuel]
-
-
-
 
 def add_constraints(model):
     model.Fuelmix = Constraint(model.f_in, model.T, rule=fuelmix_rule)

@@ -105,19 +105,21 @@ def balance_rule(m, a, e, t):
     # 4) Assemble the balance
     return buy_term + inflow + generation == fueluse + sale_term + outflow
 
-# # 5) Demand constraint based on sales + slack
+# # 5) Demand constraint based on generation + slack
 def demand_time_rule(m, a, e, t):
     # 1) GAMS $-guard: only if there is any demand at all for (a,e)
     total_area_energy = sum(m.demand[a,e,tt] for tt in m.T)
     if total_area_energy <= 0:
         return Constraint.Skip
-    # 2) LHS terms, zero when not defined in the corresponding set
-    sale_term = m.Sale[a,e,t] if (a,e) in m.saleE else 0.0
-    # slack_imp = m.SlackDemandImport[a,e,t] if (a,e) in m.buyE  else 0.0
-    # slack_exp = m.SlackDemandExport[a,e,t] if (a,e) in m.saleE else 0.0
+    # Sum of all generation of energy `e` by techs located in area `a`
+    gen = sum(
+        m.Generation[tech, ee, t]
+        for (tech, ee) in m.f_out
+        if ee==e
+    )
     slack_imp = m.SlackDemandImport[a,e,t]
     slack_exp = m.SlackDemandExport[a,e,t]
-    lhs = sale_term + slack_imp - slack_exp
+    lhs = gen + slack_imp - slack_exp
     # 3) RHS is the exact demand
     rhs = m.demand[a,e,t]
     return lhs >= rhs

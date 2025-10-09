@@ -307,7 +307,7 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     # 1) Hourly CO2 duals
     co2_rows = []
     for (area, energy, t) in model.Balance.index_set():
-        if energy == 'CO2' and area == 'Skive':
+        if energy == 'CO2Comp' and area == 'Skive':
             con       = model.Balance[area, energy, t]
             dual_val  = model.dual.get(con, 0.0)
             co2_rows.append({
@@ -317,6 +317,20 @@ def export_results(model, cfg: ModelConfig, path: str = None):
                 'Dual':   dual_val
             })
     df_co2 = pd.DataFrame(co2_rows, columns=['Area','Energy','Time','Dual'])
+
+    #Hourly Methanol Duals
+    methanol_rows = []
+    for (area, energy, t) in model.Balance.index_set():
+        if energy == 'Methanol' and area == 'Skive':
+            con       = model.Balance[area, energy, t]
+            dual_val  = model.dual.get(con, 0.0)
+            methanol_rows.append({
+                'Area':   area,
+                'Energy': energy,
+                'Time':   t,
+                'Dual':   dual_val
+            })
+    df_methanol = pd.DataFrame(methanol_rows, columns=['Area','Energy','Time','Dual'])
 
     # for t in times:
     #     row = {'Time': str(t)}
@@ -519,6 +533,8 @@ def export_results(model, cfg: ModelConfig, path: str = None):
                 df_co2.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=0)
 
                 df_duals.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=5)
+
+                df_methanol.to_excel(writer, sheet_name='Duals', index=False, startrow=0, startcol=8)
                     
 
                 # 10) Objective function decomposition

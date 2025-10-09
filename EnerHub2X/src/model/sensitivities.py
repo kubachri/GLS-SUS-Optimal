@@ -11,5 +11,6 @@ def apply_sensitivity_overrides(tech_df, data):
     # You can add more changes:
     # tech_df.at['Electrolyzer', 'StartupCost'] = 50000
     # data['price_buy'][('DK1', 'Electricity', 'T001')] = 200
+    # tech_df.at['MethanolSynthesis', 'Minimum'] = 0.4
 
     return tech_df, data

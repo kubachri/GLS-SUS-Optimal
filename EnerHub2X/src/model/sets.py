@@ -83,3 +83,4 @@ def define_sets(model, data):
     demand_target_keys = data['DemandTarget'].keys()
     model.DemandFuel = Set(dimen=2, initialize=demand_target_keys)
     model.DemandSteps = Set(initialize=sorted({step for (step, _) in demand_target_keys}))
+    model.Weeks = Set(initialize=sorted(set(data['WeekOfT'].values())))

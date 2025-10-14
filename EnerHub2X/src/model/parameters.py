@@ -75,15 +75,10 @@ def define_params(model, data, tech_df):
                                          initialize=Xcap, default= 0, within=NonNegativeReals)
     model.DemandTarget = Param(model.DemandFuel, initialize=demand_target, within=NonNegativeReals)
 
-    def _week_of_t_init(m, t):
-        all_t = list(m.T)
-        idx = all_t.index(t)
-        return f"Target{(idx // 168) + 1}"
-
-    model.weekOfT = Param(model.T, initialize=_week_of_t_init)
+    model.WeekOfT = Param(model.T, initialize=data['WeekOfT'], within=model.Weeks)
 
     # Get only steps relevant to this run, based on model.T
-    used_steps = sorted({model.weekOfT[t] for t in model.T})
+    used_steps = sorted({model.WeekOfT[t] for t in model.T})
 
     print("\n✅ Weekly Demand Targets (active for this run):\n")
     fuels = sorted(set(f for (_, f) in model.DemandFuel))

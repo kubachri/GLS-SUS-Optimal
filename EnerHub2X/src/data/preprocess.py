@@ -80,4 +80,6 @@ def slice_time_series(data, n_hours):
                 if step in active_steps
             }
     
+    #Only keep the relevant weeks
+    data['WeekOfT'] = {t: data['WeekMap'][t] for t in data['T']}
     return data

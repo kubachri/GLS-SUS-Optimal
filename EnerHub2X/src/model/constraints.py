@@ -284,7 +284,7 @@ def target_demand_rule(m, step, area_fuel):
         m.Generation[g, fuel, t]
         for g in m.G
         for t in m.T
-        if (g, fuel) in m.f_out and m.weekOfT[t] == step
+        if (g, fuel) in m.f_out and m.WeekOfT[t] == step
     )
     return total + m.SlackTarget[step, area_fuel] >= m.DemandTarget[step, area_fuel]
 

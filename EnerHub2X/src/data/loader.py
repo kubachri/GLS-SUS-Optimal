@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import numpy as np
 from src.model.sensitivities import apply_sensitivity_overrides
+from src.utils.assign_hours_to_weeks import build_full_year_week_map
 
 def load_data(cfg):
     """
@@ -307,7 +308,7 @@ def load_data(cfg):
                     demand_target[(step, area_fuel)] = float(val)
                 except Exception as e:
                     print(f"⚠ Skipping ({step}, {area_fuel}) → {val}: {e}")
-
+                    
     # -----------------------
     # Assemble and return
     # -----------------------
@@ -328,6 +329,10 @@ def load_data(cfg):
         'location':     location,
         'DemandTarget': demand_target
     }
+
+    #Assign all hours to weeks
+    data['WeekMap'] = build_full_year_week_map(T)
+    data['WeekOfT'] = {t: data['WeekMap'][t] for t in data['T']}
 
     if cfg.sensitivity:
         tech_df, data = apply_sensitivity_overrides(tech_df, data)

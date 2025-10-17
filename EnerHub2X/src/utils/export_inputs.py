@@ -91,7 +91,7 @@ def export_inputs(model, cfg, path: str = None):
         # Special reshape for price_buy / price_sale
         if pname in {"price_buy", "price_sale", "InterconnectorCapacity", "demand"}:
             df = pd.DataFrame(rows, columns=["Area", "Fuel", "Time", pname])
-            df = df[df[pname].notna() & (df[pname] != 0)]  # ✅ filter only defined nonzero
+            df = df[df[pname].notna()]  # ✅ filter only defined nonzero
             df["Area.Fuel"] = df["Area"] + "." + df["Fuel"]
             df_pivot = df.pivot(index="Time", columns="Area.Fuel", values=pname)
             df_pivot.reset_index(inplace=True)

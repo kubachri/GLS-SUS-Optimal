@@ -23,7 +23,9 @@ Scenario 3: Baseline + no storage
 Scenario 4: Baseline + Biogas constant production
 Scenario 5: Baseline + Selling biogas w/ a price
 Scenario 6: Baseline + Hydrogen selling at 3 Euro/kg
-Scenario 7: Baseline + SC4 + SC5 + SC6
+Scenario 7: Baseline + SC5 + SC6
+Scenario 8: Baseline 2022
+Scenario 9: SC6 + Less methanol demand
 
 
 Test run Storage 2019 vs Storage 2022: CO2 Storage is utilized more in 2022.

@@ -77,6 +77,12 @@ def define_params(model, data, tech_df):
 
     model.WeekOfT = Param(model.T, initialize=data['WeekOfT'], within=model.Weeks)
 
+    # Strategic parameters
+    # --------------------------------
+    model.a_co2 = Param(model.T, initialize={t: data['a_co2'].get(t, 0.0) for t in data['T']}, within=Reals)
+    model.b_co2 = Param(model.T, initialize={t: data['b_co2'].get(t, 0.0) for t in data['T']}, within=Reals)
+
+    # --------------------------------
     # Get only steps relevant to this run, based on model.T
     used_steps = sorted({model.WeekOfT[t] for t in model.T})
 

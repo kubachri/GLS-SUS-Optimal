@@ -308,6 +308,41 @@ def load_data(cfg):
                     demand_target[(step, area_fuel)] = float(val)
                 except Exception as e:
                     print(f"⚠ Skipping ({step}, {area_fuel}) → {val}: {e}")
+
+
+    # -----------------------
+    # Strategic Actors & Inverse Demand
+    # -----------------------
+
+    # Read StrategicActors sheet (optional)
+    if 'StrategicActors' in xls.sheet_names:
+        strat_df = xls.parse('StrategicActors').dropna(how='all')
+        # Expect columns: ActorName, Type (Supplier|Demander), Tech
+        strategic_suppliers = strat_df[strat_df['Type']=='Supplier']['Tech'].astype(str).tolist()
+        strategic_demanders  = strat_df[strat_df['Type']=='Demander']['Tech'].astype(str).tolist()
+    else:
+        strategic_suppliers = []
+        strategic_demanders  = []
+
+    # Read linear inverse demand for CO2 (optional)
+    # If sheet present, allow per-hour values; else fallback to simple constants
+    if 'InverseDemand_CO2' in xls.sheet_names:
+        inv_df = xls.parse('InverseDemand_CO2').dropna(how='all')
+        # If column 'Hour' present, build time-series dict
+        if 'Hour' in inv_df.columns:
+            a_co2 = {(hr): float(row['a']) for _, row in inv_df.iterrows() for hr in [row['Hour']]}
+            b_co2 = {(hr): float(row['b']) for _, row in inv_df.iterrows() for hr in [row['Hour']]}
+        else:
+            # single constants for whole horizon
+            a_co2_const = float(inv_df['a'].iloc[0])
+            b_co2_const = float(inv_df['b'].iloc[0])
+            a_co2 = {hr: a_co2_const for hr in T}
+            b_co2 = {hr: b_co2_const for hr in T}
+    else:
+        # default (very high a, near-zero b → keeps original prices if not configured)
+        a_co2 = {hr: 1e6 for hr in T}
+        b_co2 = {hr: 1e-6 for hr in T}
+
                     
     # -----------------------
     # Assemble and return
@@ -333,6 +368,12 @@ def load_data(cfg):
     #Assign all hours to weeks
     data['WeekMap'] = build_full_year_week_map(T)
     data['WeekOfT'] = {t: data['WeekMap'][t] for t in data['T']}
+
+    # Attach strategic parameters
+    data['StrategicSuppliers'] = strategic_suppliers
+    data['StrategicDemanders'] = strategic_demanders
+    data['a_co2'] = a_co2
+    data['b_co2'] = b_co2
 
     if cfg.sensitivity:
         tech_df, data = apply_sensitivity_overrides(tech_df, data)

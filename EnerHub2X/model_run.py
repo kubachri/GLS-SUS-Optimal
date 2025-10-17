@@ -26,6 +26,7 @@ def parse_args():
     p.add_argument('--green_electricity', type=lambda x: x.lower() == 'true', help="restrict grid electricity buy to <20 €/MWh")
     p.add_argument('--electricity_mandate', type=float, help="restricts electricity imports to a percent of consumption each hour")
     p.add_argument('--el_prod_to_grid', type=float, help="restricts electricity exports to a percent of generation each hour")
+    p.add_argument('--strategic', action='store_true', help="Run strategic Cournot loop for CO2")
     return p.parse_args()
 
 def main():
@@ -50,11 +51,24 @@ def main():
     )
 
     print("Building Pyomo model ...\n")
+
+    # ------------------------------
+    # Strategic run
+    # ------------------------------
+    if cfg.strategic:
+        from src.strategic.strategic_loop import run_cournot
+        final_model, strategies = run_cournot(cfg, tol=1e-3, max_iter=40, damping=0.5, co2_label='CO2')
+        export_results(final_model, cfg)
+        return final_model
+    
+    # ------------------------------
+    # Standard run
+    # ------------------------------
     print("Config values:")
     for key, option in asdict(cfg).items():
         if key == "n_test" and not cfg.test_mode:
             continue
-        print(f"{key}: {option}")
+        print   (f"{key}: {option}")
     model = build_model(cfg)
     model.name = 'GreenlabSkive_CK'
     print(f"Model {model.name} built successfully.\n")

@@ -105,50 +105,49 @@ def balance_rule(m, a, e, t):
     # 4) Assemble the balance
     return buy_term + inflow + generation == fueluse + sale_term + outflow
 
-# # 5) Demand constraint based on sales + slack
-def demand_time_rule(m, a, e, t):
-    # 1) GAMS $-guard: only if there is any demand at all for (a,e)
-    total_area_energy = sum(m.demand[a,e,tt] for tt in m.T)
-    if total_area_energy <= 0:
-        return Constraint.Skip
-    # 2) LHS terms, zero when not defined in the corresponding set
-    sale_term = m.Sale[a,e,t] if (a,e) in m.saleE else 0.0
-    # slack_imp = m.SlackDemandImport[a,e,t] if (a,e) in m.buyE  else 0.0
-    # slack_exp = m.SlackDemandExport[a,e,t] if (a,e) in m.saleE else 0.0
-    slack_imp = m.SlackDemandImport[a,e,t]
-    slack_exp = m.SlackDemandExport[a,e,t]
-    lhs = sale_term + slack_imp - slack_exp
-    # 3) RHS is the exact demand
-    rhs = m.demand[a,e,t]
-    return lhs >= rhs
+# # # 5) Demand constraint based on sales + slack
+# def demand_time_rule(m, a, e, t):
+#     # 1) GAMS $-guard: only if there is any demand at all for (a,e)
+#     total_area_energy = sum(m.demand[a,e,tt] for tt in m.T)
+#     if total_area_energy <= 0:
+#         return Constraint.Skip
+#     # 2) LHS terms, zero when not defined in the corresponding set
+#     sale_term = m.Sale[a,e,t] if (a,e) in m.saleE else 0.0
+#     # slack_imp = m.SlackDemandImport[a,e,t] if (a,e) in m.buyE  else 0.0
+#     # slack_exp = m.SlackDemandExport[a,e,t] if (a,e) in m.saleE else 0.0
+#     slack_imp = m.SlackDemandImport[a,e,t]
+#     slack_exp = m.SlackDemandExport[a,e,t]
+#     lhs = sale_term + slack_imp - slack_exp
+#     # 3) RHS is the exact demand
+#     rhs = m.demand[a,e,t]
+#     return lhs >= rhs
 
 # 5) Demand constraint based on generation + slack
-# def demand_time_rule(m, a, e, t):
-#     # Only build for actual demand points
-#     if m.demand[a,e,t] == 0:
-#         return Constraint.Skip
-#     # 1) Sum Generation[tech,e,t] for all tech in area a
-#     gen_day = sum(
-#         m.Generation[tech, e, t]
-#         for (area, tech) in m.location
-#         if area == a and (tech, e) in m.f_out
-#     )
-#
-#     # If you also store methanol/hydrogen in storage and discharge it:
-#     gen_day += sum(
-#         m.GenerationSto[tech, e, t]
-#         for (area, tech) in m.location
-#         if area == a and (tech, e) in m.STO_OUT
-#     )
-#
-#     # 2) Slack for unmet demand (import slack)
-#     slack_imp = m.SlackDemandImport[a,e,t]
-#
-#     # 3) Enforce generation + slack ≥ demand
-#     expr = (gen_day + slack_imp) >= m.demand[a,e,t]
-#
-#     # Always return a Pyomo relational
-#     return expr
+def demand_time_rule(m, a, e, t):
+    # Skip if no demand
+    if m.demand[a,e,t] == 0:
+        return Constraint.Skip
+
+    # 1) Local generation of e in area a
+    local_gen = sum(
+        m.Generation[tech, e, t]
+        for (area, tech) in m.location
+        if area == a and (tech, e) in m.f_out
+    )
+
+    # 2) Inflow from other areas
+    inflow = sum(
+        m.Flow[area_from, a, e, t]
+        for (area_from, area_to, fuel) in m.flowset
+        if area_to == a and fuel == e
+    )
+
+    # 3) Slack for unmet demand
+    slack_imp = m.SlackDemandImport[a,e,t]
+
+    # 4) Total supply ≥ demand
+    return (local_gen + inflow + slack_imp) >= m.demand[a,e,t]
+
 
 # 6) MaxBuy
 def max_buy_rule(m, e, t):

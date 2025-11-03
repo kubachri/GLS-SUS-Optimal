@@ -47,7 +47,8 @@ def main():
         sensitivity=args.sensitivity if args.sensitivity is not None else defaults.sensitivity,
         green_electricity=args.green_electricity if args.green_electricity is not None else defaults.green_electricity,
         electricity_mandate=args.electricity_mandate if args.electricity_mandate is not None else defaults.electricity_mandate,
-        el_prod_to_grid=args.el_prod_to_grid if args.el_prod_to_grid is not None else defaults.el_prod_to_grid
+        el_prod_to_grid=args.el_prod_to_grid if args.el_prod_to_grid is not None else defaults.el_prod_to_grid,
+        strategic=args.strategic if args.strategic is not None else defaults.strategic
     )
 
     print("Building Pyomo model ...\n")
@@ -68,7 +69,7 @@ def main():
     for key, option in asdict(cfg).items():
         if key == "n_test" and not cfg.test_mode:
             continue
-        print   (f"{key}: {option}")
+        print(f"{key}: {option}")
     model = build_model(cfg)
     model.name = 'GreenlabSkive_CK'
     print(f"Model {model.name} built successfully.\n")

@@ -9,6 +9,7 @@ from src.model.parameters import define_params
 from src.model.variables import define_variables
 from src.model.constraints import add_constraints
 from src.model.objective import define_objective
+from src.utils.validate_strategic_model import validate_strategic_model
 
 
 def build_model(cfg: ModelConfig) -> ConcreteModel:
@@ -65,5 +66,10 @@ def build_model(cfg: ModelConfig) -> ConcreteModel:
     define_variables(model)
     add_constraints(model)
     define_objective(model, cfg=cfg)
+
+    # print("\n[DEBUG] Builder summary:")
+    # print(f" - Strategic mode: {cfg.strategic}")
+    # print(f" - total time steps: {len(model.T)}")
+    # summary = validate_strategic_model(model)
 
     return model

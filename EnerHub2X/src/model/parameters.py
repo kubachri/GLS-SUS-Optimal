@@ -82,6 +82,10 @@ def define_params(model, data, tech_df):
     model.a_co2 = Param(model.T, initialize={t: data['a_co2'].get(t, 0.0) for t in data['T']}, within=Reals)
     model.b_co2 = Param(model.T, initialize={t: data['b_co2'].get(t, 0.0) for t in data['T']}, within=Reals)
 
+    # print(f"[DEBUG-parameters.py] model.a_co2 initialized with {len(model.T)} time steps.")
+    # print(f"[DEBUG-parameters.py] sample a_co2[1] = {model.a_co2[next(iter(model.T))]}, sample b_co2[1] = {model.b_co2[next(iter(model.T))]}")
+
+
     # --------------------------------
     # Get only steps relevant to this run, based on model.T
     used_steps = sorted({model.WeekOfT[t] for t in model.T})

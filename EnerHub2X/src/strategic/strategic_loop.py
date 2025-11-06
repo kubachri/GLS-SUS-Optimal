@@ -15,13 +15,10 @@ def run_cournot(cfg: ModelConfig, tol=1e-3, max_iter=30, damping=0.6, co2_label=
     base_model.dual = Suffix(direction=Suffix.IMPORT)
     solver = SolverFactory('gurobi')
     solver.solve(base_model, tee=False)
-    print("Initial central solve done.")
+    print("\n--- Starting Cournot best-response loop ---\n")
+    print("Initial central solve done...")
 
     # Identify strategic actors (we expect data passed into model as attributes)
-    # builder stores data in the Param sets, but we made them part of data in loader.
-    # For this function assume builder returned model AND stored data somewhere accessible.
-    # Simpler: rely on cfg or read file again inside loader if needed.
-    # For now: try to find strategic supplier techs in model.G if attribute present:
     strategic_suppliers = getattr(base_model, 'StrategicSuppliers', None)
     if strategic_suppliers is None:
         # fallback: try to read from ModelConfig? Or simply fail with informative message
@@ -46,7 +43,7 @@ def run_cournot(cfg: ModelConfig, tol=1e-3, max_iter=30, damping=0.6, co2_label=
     # Iterative BR loop
     for iteration in range(1, max_iter+1):
         max_change = 0.0
-        print(f"--- Iteration {iteration} ---")
+        print(f"\n--- Iteration {iteration} ---")
         for tech in strategic_suppliers:
             # 1) Build a fresh model copy for this BR solve
             m = build_model(cfg)
@@ -90,15 +87,17 @@ def run_cournot(cfg: ModelConfig, tol=1e-3, max_iter=30, damping=0.6, co2_label=
                 if change > max_change:
                     max_change = change
 
-        print(f" max_change this iter = {max_change:.6f}")
+        print(f"\n--- Maximal change this iteration = {max_change:.6f} ---")
         if max_change < tol:
-            print("Converged Nash (within tol).")
+            print("!!! Converged Nash (within tol)!!!")
             break
     else:
-        print("Reached max iterations without full convergence.")
+        print("... Reached max iterations without full convergence...")
 
     # Build final model with all strategic sale fixed to curr values and run final full solve
+    print("\n--- Building final full model with fixed strategic sales ---")
     final = build_model(cfg)
+    final.dual = Suffix(direction=Suffix.IMPORT)
     for tech in strategic_suppliers:
         area = tech_to_area.get(tech)
         if area is None:
@@ -109,8 +108,10 @@ def run_cournot(cfg: ModelConfig, tol=1e-3, max_iter=30, damping=0.6, co2_label=
                 final.Sale[area, co2_label, t].fix(curr[tech][t])
 
     # Solve final full model (MIP) for feasibility/costs
+    print("\n--- Solving final full model ---")
     solver = SolverFactory('gurobi_persistent')
     solver.set_instance(final, symbolic_solver_labels=True)
     solver.options['MIPGap'] = 0.05
     solver.solve(final, tee=True)
+
     return final, curr

@@ -53,6 +53,12 @@ def main():
 
     print("Building Pyomo model ...\n")
 
+    print("Config values:")
+    for key, option in asdict(cfg).items():
+        if key == "n_test" and not cfg.test_mode:
+            continue
+        print(f"{key}: {option}")
+
     # ------------------------------
     # Strategic run
     # ------------------------------
@@ -61,15 +67,10 @@ def main():
         final_model, strategies = run_cournot(cfg, tol=1e-3, max_iter=40, damping=0.5, co2_label='CO2')
         export_results(final_model, cfg)
         return final_model
-    
+   
     # ------------------------------
     # Standard run
     # ------------------------------
-    print("Config values:")
-    for key, option in asdict(cfg).items():
-        if key == "n_test" and not cfg.test_mode:
-            continue
-        print(f"{key}: {option}")
     model = build_model(cfg)
     model.name = 'GreenlabSkive_CK'
     print(f"Model {model.name} built successfully.\n")

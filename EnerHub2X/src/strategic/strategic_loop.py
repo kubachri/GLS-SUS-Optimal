@@ -1,6 +1,8 @@
 from pyomo.environ import value, SolverFactory, Suffix, Objective, maximize
 from src.model.builder import build_model
 from src.config import ModelConfig
+import io
+from contextlib import redirect_stdout
 
 def run_cournot(cfg: ModelConfig, tol=1e-3, max_iter=30, damping=0.6, co2_label='CO2'):
     """
@@ -36,12 +38,12 @@ def run_cournot(cfg: ModelConfig, tol=1e-3, max_iter=30, damping=0.6, co2_label=
     # 2. BEST-RESPONSE ITERATION LOOP
     # ------------------------------------------------------------
     for iteration in range(1, max_iter+1):
-        print(f"\n--- Iteration {iteration} ---")
+        print(f"\n----- Iteration {iteration} -----")
         max_change = 0.0
 
         for tech in strategic_suppliers:
             # Build new submodel for supplier tech
-            m = build_model(cfg)
+            m = silent_build_model(cfg)
             m.dual = Suffix(direction=Suffix.IMPORT)
 
             # Fix competitors' sales
@@ -66,7 +68,7 @@ def run_cournot(cfg: ModelConfig, tol=1e-3, max_iter=30, damping=0.6, co2_label=
 
         # Convergence test
         if max_change < tol:
-            print(f"[INFO] Converged after {iteration} iterations (tol={tol}).\n")
+            print(f"\n[INFO] Converged after {iteration} iterations (tol={tol}).\n")
             break
     else:
         print("[WARN] Max iterations reached without full convergence.\n")
@@ -75,7 +77,7 @@ def run_cournot(cfg: ModelConfig, tol=1e-3, max_iter=30, damping=0.6, co2_label=
     # 3. FINALIZATION PHASE
     # ------------------------------------------------------------
     print("[INFO] Building final model with fixed strategic sales...")
-    final_model = build_model(cfg)
+    final_model = silent_build_model(cfg)
     final_model.dual = Suffix(direction=Suffix.IMPORT)
     _fix_all_sales(final_model, strategic_suppliers, tech_to_area, curr, co2_label)
 
@@ -146,3 +148,10 @@ def _fix_all_sales(model, suppliers, tech_to_area, curr, co2_label):
             idx = (area, co2_label, t)
             if idx in model.saleE:
                 model.Sale[idx].fix(curr[tech][t])
+
+
+def silent_build_model(cfg):
+    f = io.StringIO()
+    with redirect_stdout(f):          # temporarily hide all print() inside
+        model = build_model(cfg)
+    return model

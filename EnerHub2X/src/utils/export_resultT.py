@@ -36,6 +36,8 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     base, suffix, folder = default.stem, default.suffix, default.parent
     if cfg.test_mode:
         base = "test_" + base
+    if cfg.strategic:
+        suffix = suffix.replace(".xlsx", "-strategic.xlsx")
 
     # 2) Common time index
     times = list(model.T)

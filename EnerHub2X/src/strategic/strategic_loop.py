@@ -1,4 +1,4 @@
-from pyomo.environ import value, SolverFactory, Suffix
+from pyomo.environ import value, SolverFactory, Suffix, Objective, maximize
 from src.model.builder import build_model
 from src.config import ModelConfig
 
@@ -18,7 +18,7 @@ def run_cournot(cfg: ModelConfig, tol=1e-3, max_iter=30, damping=0.6, co2_label=
     base_model.dual = Suffix(direction=Suffix.IMPORT)
     solver = SolverFactory('gurobi')
     solver.solve(base_model, tee=False)
-    print("[INFO] Centralized baseline solve completed.\n")
+    print("\n[INFO] Centralized baseline solve completed.\n")
 
     # Retrieve strategic suppliers
     strategic_suppliers = getattr(base_model, 'StrategicSuppliers', None)
@@ -55,6 +55,7 @@ def run_cournot(cfg: ModelConfig, tol=1e-3, max_iter=30, damping=0.6, co2_label=
             # and ensure no other decision variables allow arbitrage. This is approximate but often works for simple cases.
             # Solve BR
 
+            # Solve the submodel profit maximization for this suplier i
             solver.solve(m, tee=False)
 
             # Extract and update this supplier's best response
@@ -78,7 +79,7 @@ def run_cournot(cfg: ModelConfig, tol=1e-3, max_iter=30, damping=0.6, co2_label=
     final_model.dual = Suffix(direction=Suffix.IMPORT)
     _fix_all_sales(final_model, strategic_suppliers, tech_to_area, curr, co2_label)
 
-    print("[INFO] Solving final full model (MIP)...")
+    print("\n[INFO] Solving final full model (MIP)...\n")
     final_solver = SolverFactory('gurobi_persistent')
     final_solver.set_instance(final_model, symbolic_solver_labels=True)
     final_solver.options['MIPGap'] = 0.05

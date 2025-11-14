@@ -15,6 +15,7 @@ from src.utils.max_contraint_violation import detect_max_constraint_violation
 import pandas as pd
 from src.utils.export_inputs import export_inputs
 from dataclasses import asdict
+from pathlib import Path
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -26,28 +27,16 @@ def parse_args():
     p.add_argument('--green_electricity', type=lambda x: x.lower() == 'true', help="restrict grid electricity buy to <20 €/MWh")
     p.add_argument('--electricity_mandate', type=float, help="restricts electricity imports to a percent of consumption each hour")
     p.add_argument('--el_prod_to_grid', type=float, help="restricts electricity exports to a percent of generation each hour")
+    p.add_argument('--multiple_scenarios', type=str, help="Run all Excel scenarios in a given folder (e.g. 'scenarios_multiple')")
+
     return p.parse_args()
 
-def main():
-
+def run_model(cfg, scenario_name=None):
     start_time = time.time()
     print("==========================")
     print("Model Run Started")
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("==========================\n")
-
-    args = parse_args()
-    defaults = ModelConfig()
-    cfg = ModelConfig(
-        test_mode=args.test,
-        n_test=args.n_test if args.n_test is not None else defaults.n_test,
-        penalty=args.penalty if args.penalty is not None else defaults.penalty,
-        demand_target=args.demand_target if args.demand_target is not None else defaults.demand_target,
-        sensitivity=args.sensitivity if args.sensitivity is not None else defaults.sensitivity,
-        green_electricity=args.green_electricity if args.green_electricity is not None else defaults.green_electricity,
-        electricity_mandate=args.electricity_mandate if args.electricity_mandate is not None else defaults.electricity_mandate,
-        el_prod_to_grid=args.el_prod_to_grid if args.el_prod_to_grid is not None else defaults.el_prod_to_grid
-    )
 
     print("Building Pyomo model ...\n")
     print("Config values:")
@@ -55,6 +44,7 @@ def main():
         if key == "n_test" and not cfg.test_mode:
             continue
         print(f"{key}: {option}")
+
     model = build_model(cfg)
     model.name = 'GreenlabSkive_CK'
     print(f"Model {model.name} built successfully.\n")
@@ -203,9 +193,11 @@ def main():
     #             print(f"  area={a}, time={t}: dual = {π:,.4f}")
 
     # export_results_to_excel(model)
+    results_path = f"results/Results_{scenario_name}.xlsx" if scenario_name else None
+    inputs_path  = f"results/Inputs_{scenario_name}.xlsx"  if scenario_name else None
     print("Exporting to Excel ... ")
-    export_results(model, cfg)
-    export_inputs(model, cfg)
+    export_results(model, cfg, path=results_path)
+    export_inputs(model, cfg, path=inputs_path)
     # debug_objective(model, cfg)
     
     elapsed = time.time() - start_time
@@ -217,6 +209,42 @@ def main():
     print("==========================")
 
     return model
+
+def main():
+    args = parse_args()
+    defaults = ModelConfig()
+
+    if args.multiple_scenarios:
+        folder = Path(args.multiple_scenarios)
+        files = sorted(folder.glob("*.xlsx"))
+
+        for file in files:
+            print(f"\n=== Running scenario: {file.name} ===\n")
+            cfg = ModelConfig(
+                data_file=str(file),
+                test_mode=args.test,
+                n_test=args.n_test if args.n_test is not None else defaults.n_test,
+                penalty=args.penalty if args.penalty is not None else defaults.penalty,
+                demand_target=args.demand_target if args.demand_target is not None else defaults.demand_target,
+                sensitivity=args.sensitivity if args.sensitivity is not None else defaults.sensitivity,
+                green_electricity=args.green_electricity if args.green_electricity is not None else defaults.green_electricity,
+                electricity_mandate=args.electricity_mandate if args.electricity_mandate is not None else defaults.electricity_mandate,
+                el_prod_to_grid=args.el_prod_to_grid if args.el_prod_to_grid is not None else defaults.el_prod_to_grid,
+            )
+            run_model(cfg, scenario_name = file.stem.removeprefix("Data_"))
+
+    else:
+        cfg = ModelConfig(
+            test_mode=args.test,
+            n_test=args.n_test if args.n_test is not None else defaults.n_test,
+            penalty=args.penalty if args.penalty is not None else defaults.penalty,
+            demand_target=args.demand_target if args.demand_target is not None else defaults.demand_target,
+            sensitivity=args.sensitivity if args.sensitivity is not None else defaults.sensitivity,
+            green_electricity=args.green_electricity if args.green_electricity is not None else defaults.green_electricity,
+            electricity_mandate=args.electricity_mandate if args.electricity_mandate is not None else defaults.electricity_mandate,
+            el_prod_to_grid=args.el_prod_to_grid if args.el_prod_to_grid is not None else defaults.el_prod_to_grid,
+        )
+        run_model(cfg)
 
 if __name__ == '__main__':
     model = main()

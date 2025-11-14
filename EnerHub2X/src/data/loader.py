@@ -13,7 +13,9 @@ def load_data(cfg):
     Returns the same `data` dict shape as before.
     """
     # Path to the Excel file (assumed in project root)
-    excel_path = os.path.join(os.getcwd(), "Data_MeOH_only.xlsx")
+    # Choose whether to run a single scenario or multiple scenarios one after the other
+    excel_path = cfg.data_file or os.path.join(os.getcwd(), "Data_MeOH_UC.xlsx")
+
     if not os.path.isfile(excel_path):
         raise FileNotFoundError(f"Could not find Excel data file: {excel_path}")
 

@@ -95,8 +95,11 @@ def export_results(model, cfg: ModelConfig, path: str = None):
     varom = []
     for g in model.G:
         row = {'Result': 'Variable_OM_cost_EUR', 'tech': g, 'energy': 'system_cost'}
+        # Find all exported energies for this technology
+        export_fuels = [e for (gg, e) in model.TechToEnergy if gg == g]
         for t in times:
-            row[str(t)] = value(model.Fuelusetotal[g, t]) * model.cvar[g]
+            gen_sum = sum(value(model.Generation[g, e, t]) for e in export_fuels)
+            row[str(t)] = gen_sum * model.cvar[g]
         varom.append(row)
     df_varom = pd.DataFrame(varom)
 
@@ -413,6 +416,19 @@ def export_results(model, cfg: ModelConfig, path: str = None):
         for t in times
     )
     decomp.append({"Element": "Variable_OM", "Contribution": - tot_varom})
+
+    # Variable O&M per technology
+    varom_by_tech = defaultdict(float)
+    for (g, e) in model.TechToEnergy:
+        for t in times:
+            varom_by_tech[g] += value(model.Generation[g, e, t]) * model.cvar[g]
+
+    # Append each tech's contribution to decomposition
+    for g, val in varom_by_tech.items():
+        decomp.append({
+            "Element": f"Variable_OM_{g}",
+            "Contribution": -val
+        })
 
     #  d) Startup costs
     tot_start = sum(

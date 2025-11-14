@@ -409,15 +409,15 @@ def export_results(model, cfg: ModelConfig, path: str = None):
             "Contribution": tot
         })
 
-    #  c) Variable O&M on tech→energy
-    tot_varom = sum(
-        value(model.Generation[g, e, t] * model.cvar[g])
-        for (g, e) in model.TechToEnergy
-        for t in times
-    )
-    decomp.append({"Element": "Variable_OM", "Contribution": - tot_varom})
+    # #  c) Variable O&M on tech→energy
+    # tot_varom = sum(
+    #     value(model.Generation[g, e, t] * model.cvar[g])
+    #     for (g, e) in model.TechToEnergy
+    #     for t in times
+    # )
+    # decomp.append({"Element": "Variable_OM", "Contribution": - tot_varom})
 
-    # Variable O&M per technology
+    # c) Variable O&M per technology
     varom_by_tech = defaultdict(float)
     for (g, e) in model.TechToEnergy:
         for t in times:
